@@ -1,0 +1,29 @@
+{
+    "Function Component": {
+        "prefix": "fc",
+        "body": [
+            "",
+            "const ${1:${TM_FILENAME_BASE/(\\w)(\\w*)/${1:/upcase}$2/}} = () => {",
+            "  return (",
+            "    <div className=\"\">",
+            "      $0",
+            "    </div>",
+            "  );",
+            "};",
+            "",
+            "export default ${1:${TM_FILENAME_BASE/(\\w)(\\w*)/${1:/upcase}$2/}};"
+        ],
+        "description": "Create Function Component"
+    },
+    "React useState Hook": {
+        "prefix": "rus",
+        "body": [
+            "const [${1/(.)(.*)/${1:/downcase}$2/}, set${1/(.)(.*)/${1:/capitalize}$2/}] = useState<${2:any}>(${3:initialValue});",
+            "",
+            "const handle${1/(.)(.*)/${1:/capitalize}$2/}Change = (e: React.ChangeEvent<HTMLInputElement>) => {",
+            "  set${1/(.)(.*)/${1:/capitalize}$2/}(e.target.value);",
+            "};"
+        ],
+        "description": "Initialize a useState hook with state variable and setter"
+    },
+}
