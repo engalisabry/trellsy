@@ -18,12 +18,30 @@
     "React useState Hook": {
         "prefix": "rus",
         "body": [
-            "const [${1/(.)(.*)/${1:/downcase}$2/}, set${1/(.)(.*)/${1:/capitalize}$2/}] = useState<${2:any}>(${3:initialValue});",
-            "",
-            "const handle${1/(.)(.*)/${1:/capitalize}$2/}Change = (e: React.ChangeEvent<HTMLInputElement>) => {",
-            "  set${1/(.)(.*)/${1:/capitalize}$2/}(e.target.value);",
-            "};"
-        ],
-        "description": "Initialize a useState hook with state variable and setter"
+      "// State declaration with type safety",
+      "const [${1:state}, set${1/(.*)/${1:/capitalize}/}] = useState<${2:string}>(${3:''});",
+      "",
+      "// Generic change handler for input elements",
+      "const handle${1/(.*)/${1:/capitalize}/}Change = (e: React.ChangeEvent<HTMLInputElement>) => {",
+      "  set${1/(.*)/${1:/capitalize}/}(e.target.value);",
+      "};",
+      "",
+      "// Direct value setter",
+      "const set${1/(.*)/${1:/capitalize}/}Value = (value: ${2:string}) => {",
+      "  set${1/(.*)/${1:/capitalize}/}(value);",
+      "};",
+      "",
+      "// Toggle boolean state (useful for flags)",
+      "const toggle${1/(.*)/${1:/capitalize}/} = () => {",
+      "  set${1/(.*)/${1:/capitalize}/}(prev => !prev);",
+      "};",
+      "",
+      "// Reset state to initial value",
+      "const reset${1/(.*)/${1:/capitalize}/} = () => {",
+      "  set${1/(.*)/${1:/capitalize}/}(${3:''});",
+      "};"
+    ],
+        "description": "Initialize a useState hook with state variable, setter, and common handler patterns"
     },
+    
 }
