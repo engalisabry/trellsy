@@ -1,23 +1,23 @@
 {
-    "Function Component": {
-        "prefix": "fc",
-        "body": [
-            "",
-            "const ${1:${TM_FILENAME_BASE/(\\w)(\\w*)/${1:/upcase}$2/}} = () => {",
-            "  return (",
-            "    <div className=\"\">",
-            "      $0",
-            "    </div>",
-            "  );",
-            "};",
-            "",
-            "export default ${1:${TM_FILENAME_BASE/(\\w)(\\w*)/${1:/upcase}$2/}};"
-        ],
-        "description": "Create Function Component"
-    },
-    "React useState Hook": {
-        "prefix": "rus",
-        "body": [
+  "Function Component": {
+    "prefix": "fc",
+    "body": [
+      "",
+      "const ${1:${TM_FILENAME_BASE/(\\w)(\\w*)/${1:/upcase}$2/}} = () => {",
+      "  return (",
+      "    <div className=\"\">",
+      "      $0",
+      "    </div>",
+      "  );",
+      "};",
+      "",
+      "export default ${1:${TM_FILENAME_BASE/(\\w)(\\w*)/${1:/upcase}$2/}};",
+    ],
+    "description": "Create Function Component",
+  },
+  "React useState Hook": {
+    "prefix": "rus",
+    "body": [
       "// State declaration with type safety",
       "const [${1:state}, set${1/(.*)/${1:/capitalize}/}] = useState<${2:string}>(${3:''});",
       "",
@@ -39,9 +39,8 @@
       "// Reset state to initial value",
       "const reset${1/(.*)/${1:/capitalize}/} = () => {",
       "  set${1/(.*)/${1:/capitalize}/}(${3:''});",
-      "};"
+      "};",
     ],
-        "description": "Initialize a useState hook with state variable, setter, and common handler patterns"
-    },
-    
+    "description": "Initialize a useState hook with state variable, setter, and common handler patterns",
+  },
 }

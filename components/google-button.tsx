@@ -32,9 +32,7 @@ export const GoogleButton = () => {
         return toast.error(error.message);
       }
       router.push('/protected');
-
-      // The OAuth flow will handle the redirect
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof Error) {
         return toast.error(error?.message);
       } else {
