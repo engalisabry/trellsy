@@ -1,26 +1,26 @@
+// app/protected/page.tsx
 import { redirect } from 'next/navigation';
-import { LogoutButton } from '@/components/logout-button';
-import { ThemeToggle } from '@/components/theme-toggle';
 import { createClient } from '@/lib/supabase/server';
 
 export default async function ProtectedPage() {
   const supabase = await createClient();
-
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
-  if (error || !user) {
-    redirect('/login');
+
+  if (error || !user) redirect('/login');
+
+  // Check if user has organizations
+  const { data: organizations } = await supabase
+    .from('organization_members')
+    .select('organization_id')
+    .eq('user_id', user.id);
+
+  if (!organizations?.length) {
+    redirect('/create-organization');
   }
 
-  return (
-    <div className='flex h-svh w-full items-center justify-center gap-2'>
-      <ThemeToggle />
-      <p>
-        Hello <span>{user?.email}</span>
-      </p>
-      <LogoutButton />
-    </div>
-  );
+  // User has organizations - redirect to dashboard
+  redirect('/dashboard');
 }
