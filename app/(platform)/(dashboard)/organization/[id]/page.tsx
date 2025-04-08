@@ -38,7 +38,7 @@ export default function OrganizationPage() {
           error: authError,
         } = await supabase.auth.getUser();
         if (authError || !user) {
-          router.push('/sign-in');
+          router.push('/login');
           return toast.error('Authentication required');
         }
 
@@ -59,7 +59,7 @@ export default function OrganizationPage() {
           });
         } else {
           toast.error('Organization not found');
-          router.push('/dashboard');
+          router.push('/organization');
         }
       } catch (error) {
         console.error('Error:', error);

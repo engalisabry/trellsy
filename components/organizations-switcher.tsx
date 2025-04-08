@@ -2,7 +2,7 @@
 
 import { CSSProperties, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Loader2, Plus } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -33,11 +33,17 @@ interface OrganizationSwitcherProps {
 }
 
 interface OrganizationMember {
-  organizations: {
-    id: string;
-    name: string;
-    logo_url: string | null;
-  }[];
+  organizations:
+    | {
+        id: string;
+        name: string;
+        logo_url: string | null;
+      }
+    | {
+        id: string;
+        name: string;
+        logo_url: string | null;
+      }[]; // in case it returns multiple organizations
 }
 
 export function OrganizationSwitcher({
@@ -49,15 +55,20 @@ export function OrganizationSwitcher({
 }: OrganizationSwitcherProps) {
   const supabase = createClient();
   const router = useRouter();
+
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>(
+    currentOrgId || '',
+  );
 
   const handleOrganizationAction = (orgId: string) => {
     if (orgId === 'create') {
-      router.push(`${afterCreateOrganizationUrl}`);
+      router.push(afterCreateOrganizationUrl(''));
     } else if (orgId === 'leave') {
       router.push(afterLeaveOrganizationUrl);
     } else {
+      setSelectedOrgId(orgId);
       router.push(afterSelectOrganizationUrl(orgId));
     }
   };
@@ -74,34 +85,49 @@ export function OrganizationSwitcher({
         .select('organizations(id, name, logo_url)')
         .eq('user_id', user.id);
 
-      // In your fetch function:
       if (!error && data) {
-        const orgs = (data as OrganizationMember[]).flatMap(
-          ({ organizations }) =>
-            organizations.map((org) => ({
+        // In case data returns an array of rows where organizations can be either an object or an array:
+        const orgs = data
+          .map((row: OrganizationMember) => {
+            // Wrap organization property into an array if it isn't one
+            const orgArray = Array.isArray(row.organizations)
+              ? row.organizations
+              : [row.organizations];
+            return orgArray.map((org) => ({
               id: org.id,
               name: org.name,
               logo: org.logo_url,
-            })),
-        );
+            }));
+          })
+          .flat()
+          .filter(Boolean);
+
         setOrganizations(orgs);
+        // If no default is set yet, set the first organization's id as the default
+        if (!currentOrgId && orgs.length > 0) {
+          setSelectedOrgId(orgs[0].id);
+        }
       }
       setLoading(false);
     };
 
     fetchOrganizations();
-  }, []);
-
-  if (loading) return <div>Loading organizations...</div>;
+  }, [currentOrgId, supabase]);
 
   return (
     <div style={appearance?.elements?.rootBox}>
       <Select
-        value={currentOrgId}
+        value={selectedOrgId}
         onValueChange={handleOrganizationAction}
       >
         <SelectTrigger style={appearance?.elements?.trigger}>
-          <SelectValue placeholder='Select organization' />
+          {loading ? (
+            <div className='flex items-center gap-2'>
+              <Loader2 className='h-4 w-4 animate-spin' />
+            </div>
+          ) : (
+            <SelectValue placeholder='Select organization' />
+          )}
         </SelectTrigger>
         <SelectContent>
           {organizations.map((org) => (

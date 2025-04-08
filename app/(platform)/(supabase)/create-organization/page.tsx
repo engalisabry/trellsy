@@ -18,7 +18,7 @@ export default async function CreateOrganizationPage() {
     .eq('user_id', user.id);
 
   if (organizations?.length) {
-    redirect('/dashboard');
+    redirect('/organization');
   }
 
   return (

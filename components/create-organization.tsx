@@ -132,7 +132,7 @@ export function CreateOrganization() {
 
       toast.success('Organization created successfully!');
       await fetchUserOrganizations();
-      router.push(`/dashboard/organization/${orgData.id}`);
+      router.push(`/organization`);
     } catch (error) {
       console.error('Error:', error);
       toast.error(

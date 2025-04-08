@@ -15,7 +15,7 @@ export const Navbar = () => {
             variant='ghost'
             asChild
           >
-            <Link href='/auth/sign-in'>Login</Link>
+            <Link href='/auth/login'>Login</Link>
           </Button>
           <Button
             size='sm'

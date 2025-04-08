@@ -21,6 +21,6 @@ export default async function ProtectedPage() {
     redirect('/create-organization');
   }
 
-  // User has organizations - redirect to dashboard
-  redirect('/dashboard');
+  // User has organizations - redirect to organization
+  redirect('/organization');
 }
