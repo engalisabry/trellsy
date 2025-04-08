@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+/**
+ * depviz.js
+ * 
+ * A lightweight dependency visualizer:
+ *  - It runs "npm ls --json" to get the full dependency tree of your project.
+ *  - It generates a Graphviz DOT file representing the dependency relationships.
+ *
+ * Usage:
+ *    node depviz.js | dot -Tpng -o depviz.png
+ * 
+ * Requirements:
+ *    - Node.js installed.
+ *    - Graphviz installed (for generating an image from DOT).
+ */
+
+const { exec } = require('child_process');
+
+// Run "npm ls --json" to get the dependency tree.
+exec('npm ls --json', { maxBuffer: 1024 * 1024 * 10 }, (err, stdout, stderr) => {
+  if (err) {
+    console.error("Error running npm ls:", stderr);
+    process.exit(1);
+  }
+  
+  let tree;
+  try {
+    tree = JSON.parse(stdout);
+  } catch (parseError) {
+    console.error("Error parsing JSON output:", parseError);
+    process.exit(1);
+  }
+  
+  // Set to track added nodes (to avoid duplicates)
+  const addedNodes = new Set();
+  // Array to store DOT edges
+  const edges = [];
+
+  // Recursively traverse the dependency tree.
+  function traverse(node, parentName = null) {
+    const nodeName = node.name || 'unknown';
+    // Use the package name + version as a unique id.
+    const nodeId = `${nodeName}@${node.version || 'unknown'}`;
+    
+    // Add node if not already added.
+    if (!addedNodes.has(nodeId)) {
+      addedNodes.add(nodeId);
+    }
+    
+    // If there's a parent, record an edge.
+    if (parentName) {
+      edges.push(`  "${parentName}" -> "${nodeId}";`);
+    }
+    
+    // Traverse dependencies if available.
+    if (node.dependencies) {
+      for (const dep in node.dependencies) {
+        traverse(node.dependencies[dep], nodeId);
+      }
+    }
+  }
+
+  traverse(tree);
+
+  // Output the DOT file.
+  console.log('digraph dependencies {');
+  console.log('  rankdir=LR;'); // left-to-right layout (optional)
+  // Print all collected edges.
+  edges.forEach(edge => console.log(edge));
+  console.log('}');
+});
+
