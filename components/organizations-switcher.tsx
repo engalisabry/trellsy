@@ -1,8 +1,17 @@
 'use client';
 
-import { CSSProperties, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { CSSProperties, useEffect, useRef, useState } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { Loader2, Plus } from 'lucide-react';
+import { CreateOrganization } from '@/components/create-organization';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -43,7 +52,7 @@ interface OrganizationMember {
         id: string;
         name: string;
         logo_url: string | null;
-      }[]; // in case it returns multiple organizations
+      }[];
 }
 
 export function OrganizationSwitcher({
@@ -55,21 +64,34 @@ export function OrganizationSwitcher({
 }: OrganizationSwitcherProps) {
   const supabase = createClient();
   const router = useRouter();
+  const pathName = usePathname();
+  const { id: currentOrgIdFromUrl } = useParams();
+  const hasPushed = useRef(false);
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrgId, setSelectedOrgId] = useState<string>(
     currentOrgId || '',
   );
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (currentOrgIdFromUrl && currentOrgIdFromUrl !== selectedOrgId) {
+      setSelectedOrgId(currentOrgIdFromUrl as string);
+    }
+  }, [currentOrgIdFromUrl, selectedOrgId]);
 
   const handleOrganizationAction = (orgId: string) => {
+    const newUrl = afterSelectOrganizationUrl(orgId);
+    const newPath = new URL(newUrl, window.location.origin).pathname;
+
     if (orgId === 'create') {
-      router.push(afterCreateOrganizationUrl(''));
+      setIsModalOpen(true);
     } else if (orgId === 'leave') {
       router.push(afterLeaveOrganizationUrl);
-    } else {
-      setSelectedOrgId(orgId);
-      router.push(afterSelectOrganizationUrl(orgId));
+    } else if (newPath !== pathName && !hasPushed.current) {
+      hasPushed.current = true;
+      router.push(newUrl);
     }
   };
 
@@ -86,10 +108,8 @@ export function OrganizationSwitcher({
         .eq('user_id', user.id);
 
       if (!error && data) {
-        // In case data returns an array of rows where organizations can be either an object or an array:
         const orgs = data
           .map((row: OrganizationMember) => {
-            // Wrap organization property into an array if it isn't one
             const orgArray = Array.isArray(row.organizations)
               ? row.organizations
               : [row.organizations];
@@ -103,7 +123,6 @@ export function OrganizationSwitcher({
           .filter(Boolean);
 
         setOrganizations(orgs);
-        // If no default is set yet, set the first organization's id as the default
         if (!currentOrgId && orgs.length > 0) {
           setSelectedOrgId(orgs[0].id);
         }
@@ -115,62 +134,84 @@ export function OrganizationSwitcher({
   }, [currentOrgId, supabase]);
 
   return (
-    <div style={appearance?.elements?.rootBox}>
-      <Select
-        value={selectedOrgId}
-        onValueChange={handleOrganizationAction}
-      >
-        <SelectTrigger style={appearance?.elements?.trigger}>
-          {loading ? (
-            <div className='flex items-center gap-2'>
-              <Loader2 className='h-4 w-4 animate-spin' />
-            </div>
-          ) : (
-            <SelectValue placeholder='Select organization' />
-          )}
-        </SelectTrigger>
-        <SelectContent>
-          {organizations.map((org) => (
+    <>
+      <div style={appearance?.elements?.rootBox}>
+        <Select
+          value={selectedOrgId}
+          onValueChange={(val) => {
+            if (val !== selectedOrgId) {
+              handleOrganizationAction(val);
+            }
+          }}
+        >
+          <SelectTrigger style={appearance?.elements?.trigger}>
+            {loading ? (
+              <div className='flex items-center gap-2'>
+                <Loader2 className='h-4 w-4 animate-spin' />
+              </div>
+            ) : (
+              <SelectValue placeholder='Select organization' />
+            )}
+          </SelectTrigger>
+          <SelectContent>
+            {organizations.map((org) => (
+              <SelectItem
+                key={org.id}
+                value={org.id}
+                style={appearance?.elements?.item}
+              >
+                <div className='flex items-center gap-2'>
+                  {org.logo ? (
+                    <img
+                      src={org.logo}
+                      alt={org.name}
+                      className='h-5 w-5 rounded-full object-cover'
+                    />
+                  ) : (
+                    <span className='flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs font-medium'>
+                      {org.name.charAt(0)}
+                    </span>
+                  )}
+                  {org.name}
+                </div>
+              </SelectItem>
+            ))}
             <SelectItem
-              key={org.id}
-              value={org.id}
+              value='create'
               style={appearance?.elements?.item}
             >
               <div className='flex items-center gap-2'>
-                {org.logo ? (
-                  <img
-                    src={org.logo}
-                    alt={org.name}
-                    className='h-5 w-5 rounded-full object-cover'
-                  />
-                ) : (
-                  <span className='flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs font-medium'>
-                    {org.name.charAt(0)}
-                  </span>
-                )}
-                {org.name}
+                <Plus className='h-4 w-4' />
+                Create Organization
               </div>
             </SelectItem>
-          ))}
-          <SelectItem
-            value='create'
-            style={appearance?.elements?.item}
-          >
-            <div className='flex items-center gap-2'>
-              <Plus className='h-4 w-4' />
-              Create Organization
-            </div>
-          </SelectItem>
-          {organizations.length > 0 && (
-            <SelectItem
-              value='leave'
-              style={appearance?.elements?.item}
-            >
-              Leave Organization
-            </SelectItem>
-          )}
-        </SelectContent>
-      </Select>
-    </div>
+            {organizations.length > 0 && (
+              <SelectItem
+                value='leave'
+                style={appearance?.elements?.item}
+              >
+                Leave Organization
+              </SelectItem>
+            )}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Organization</DialogTitle>
+            <DialogDescription>
+              Fill out the details to create a new organization.
+            </DialogDescription>
+          </DialogHeader>
+          <CreateOrganization />
+          <DialogClose onClick={() => setIsModalOpen(false)}>Close</DialogClose>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -27,8 +27,6 @@ const Navbar = () => {
       </Button>
       <div className='ml-auto flex items-center gap-x-2'>
         <OrganizationSwitcher />
-      </div>
-      <div className='ml-auto flex items-center gap-x-2'>
         <UserProfile />
       </div>
     </nav>
