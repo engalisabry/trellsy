@@ -22,6 +22,12 @@ import {
 } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 
+interface OrganizationMember {
+  organization_id: string;
+  organizations: {
+    name: string;
+  };
+}
 export function CreateOrganization() {
   const supabase = createClient();
   const router = useRouter();
@@ -29,7 +35,8 @@ export function CreateOrganization() {
   const [logo, setLogo] = useState<File | null>(null);
   const [role, setRole] = useState<'admin' | 'member'>('admin');
   const [loading, setLoading] = useState(false);
-
+  const [organizations, setOrganizations] = useState<OrganizationMember[]>([]);
+  console.log(organizations);
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -40,7 +47,10 @@ export function CreateOrganization() {
       } = await supabase.auth.getSession();
       if (!session) throw new Error('No active session');
 
-      // Create organization
+      {
+        /* Create organization */
+      }
+
       const { data: orgData, error: orgError } = await supabase
         .from('organizations')
         .insert({
@@ -50,15 +60,16 @@ export function CreateOrganization() {
         .select()
         .single();
 
-      if (orgError) throw orgError;
+      if (orgError) return toast.error(orgError.message);
 
-      // Upload logo if provided
+      {
+        /* Upload Org Logo */
+      }
       if (logo) {
         const fileExt = logo.name.split('.').pop();
         const fileName = `${orgData.id}-${Date.now()}.${fileExt}`;
         const filePath = `org-logos/${fileName}`;
 
-        // First ensure the bucket exists
         const { data: buckets } = await supabase.storage.listBuckets();
         if (!buckets?.some((b) => b.name === 'organization-logos')) {
           await supabase.storage.createBucket('organization-logos', {
@@ -68,7 +79,6 @@ export function CreateOrganization() {
           });
         }
 
-        // Upload the file
         const { error: uploadError } = await supabase.storage
           .from('organization-logos')
           .upload(filePath, logo);
@@ -94,8 +104,35 @@ export function CreateOrganization() {
         role: role,
       });
 
+      {
+        /* fetch user's organizations */
+      }
+      const fetchUserOrganizations = async () => {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+        if (!user) return;
+
+        const { data, error } = await supabase
+          .from('organization_members')
+          .select(
+            `
+            organization_id, 
+            organizations:organizations!inner(name)
+          `,
+          )
+          .eq('user_id', user.id);
+
+        if (!error && data) {
+          console.log('Organizations data:', data); // Add this line
+          // @ts-expect-error - Supabase returns correct shape that matches our interface
+          setOrganizations(data as OrganizationMember[]);
+        }
+      };
+
       toast.success('Organization created successfully!');
-      router.push('/dashboard');
+      await fetchUserOrganizations();
+      router.push(`/dashboard/organization/${orgData.id}`);
     } catch (error) {
       console.error('Error:', error);
       toast.error(

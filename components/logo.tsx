@@ -7,7 +7,7 @@ const calFontHeading = localFont({
   src: '../public/fonts/CalSans-SemiBold.woff2',
 });
 
-const Logo = () => {
+export const Logo = () => {
   return (
     <div className='w-[35%] gap-x-2 transition hover:opacity-75 md:flex md:w-auto md:items-center'>
       <Link
@@ -26,5 +26,3 @@ const Logo = () => {
     </div>
   );
 };
-
-export default Logo;
