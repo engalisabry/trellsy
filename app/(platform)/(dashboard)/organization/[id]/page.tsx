@@ -1,3 +1,4 @@
+// app/organization/[id]/page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -5,6 +6,8 @@ import Image from 'next/image';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
+
+// app/organization/[id]/page.tsx
 
 type OrgType = {
   id: string;
@@ -17,16 +20,11 @@ export default function OrganizationPage() {
   const [organization, setOrganization] = useState<OrgType | null>(null);
   const params = useParams();
   const [loading, setLoading] = useState(true);
-  const [orgId, setOrgId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
-    setOrgId(params.id as string);
-  }, [orgId]);
-
-  useEffect(() => {
-    // 1. Modified the fetchOrganization function:
     const fetchOrganization = async () => {
+      const orgId = params.id as string;
       if (!orgId) return;
 
       try {
@@ -42,21 +40,17 @@ export default function OrganizationPage() {
           return toast.error('Authentication required');
         }
 
-        // Fetch org data (changed to single row query)
+        // Fetch org data
         const { data, error } = await supabase
           .from('organizations')
           .select('id, name, logo_url')
           .eq('id', orgId)
-          .single(); // Added .single()
+          .single();
 
         if (error) throw error;
 
         if (data) {
-          setOrganization({
-            id: data.id,
-            name: data.name,
-            logo_url: data.logo_url,
-          });
+          setOrganization(data);
         } else {
           toast.error('Organization not found');
           router.push('/organization');
@@ -70,10 +64,8 @@ export default function OrganizationPage() {
     };
 
     fetchOrganization();
-    console.log(organization);
-  }, [orgId]);
+  }, [params.id, router, supabase]);
 
-  // 2. Added loading states:
   if (loading) return <div>Loading...</div>;
   if (!organization) return <div>Not available</div>;
 
@@ -96,6 +88,7 @@ export default function OrganizationPage() {
             width={128}
             height={128}
             className='h-32 w-32 rounded-md object-contain'
+            priority
           />
         ) : (
           <div className='flex h-32 w-32 items-center justify-center rounded-md bg-gray-200'>

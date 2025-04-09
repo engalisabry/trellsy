@@ -1,8 +1,9 @@
 'use client';
 
-import { CSSProperties, useEffect, useRef, useState } from 'react';
+import { CSSProperties, useCallback, useEffect, useState } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { Loader2, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { CreateOrganization } from '@/components/create-organization';
 import {
   Dialog,
@@ -28,9 +29,6 @@ interface Organization {
 }
 
 interface OrganizationSwitcherProps {
-  afterCreateOrganizationUrl?: (orgId: string) => string;
-  afterLeaveOrganizationUrl?: string;
-  afterSelectOrganizationUrl?: (orgId: string) => string;
   appearance?: {
     elements?: {
       rootBox?: CSSProperties;
@@ -38,100 +36,96 @@ interface OrganizationSwitcherProps {
       item?: CSSProperties;
     };
   };
-  currentOrgId?: string;
-}
-
-interface OrganizationMember {
-  organizations:
-    | {
-        id: string;
-        name: string;
-        logo_url: string | null;
-      }
-    | {
-        id: string;
-        name: string;
-        logo_url: string | null;
-      }[];
 }
 
 export function OrganizationSwitcher({
-  afterCreateOrganizationUrl = (orgId) => `/organization/${orgId}`,
-  afterLeaveOrganizationUrl = '/select-org',
-  afterSelectOrganizationUrl = (orgId) => `/organization/${orgId}`,
   appearance,
-  currentOrgId,
 }: OrganizationSwitcherProps) {
   const supabase = createClient();
   const router = useRouter();
-  const pathName = usePathname();
-  const { id: currentOrgIdFromUrl } = useParams();
-  const hasPushed = useRef(false);
+  const pathname = usePathname();
+  const params = useParams();
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>(
-    currentOrgId || '',
-  );
+  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  useEffect(() => {
-    if (currentOrgIdFromUrl && currentOrgIdFromUrl !== selectedOrgId) {
-      setSelectedOrgId(currentOrgIdFromUrl as string);
-    }
-  }, [currentOrgIdFromUrl, selectedOrgId]);
-
-  const handleOrganizationAction = (orgId: string) => {
-    const newUrl = afterSelectOrganizationUrl(orgId);
-    const newPath = new URL(newUrl, window.location.origin).pathname;
-
-    if (orgId === 'create') {
-      setIsModalOpen(true);
-    } else if (orgId === 'leave') {
-      router.push(afterLeaveOrganizationUrl);
-    } else if (newPath !== pathName && !hasPushed.current) {
-      hasPushed.current = true;
-      router.push(newUrl);
-    }
-  };
-
-  useEffect(() => {
-    const fetchOrganizations = async () => {
+  // Fetch organizations with error handling
+  const fetchOrganizations = useCallback(async () => {
+    try {
       const {
         data: { user },
+        error: authError,
       } = await supabase.auth.getUser();
-      if (!user) return;
+      if (authError || !user) {
+        throw new Error('Authentication required');
+      }
 
       const { data, error } = await supabase
         .from('organization_members')
         .select('organizations(id, name, logo_url)')
         .eq('user_id', user.id);
 
-      if (!error && data) {
-        const orgs = data
-          .map((row: OrganizationMember) => {
-            const orgArray = Array.isArray(row.organizations)
-              ? row.organizations
-              : [row.organizations];
-            return orgArray.map((org) => ({
-              id: org.id,
-              name: org.name,
-              logo: org.logo_url,
-            }));
-          })
-          .flat()
-          .filter(Boolean);
+      if (error) throw error;
 
-        setOrganizations(orgs);
-        if (!currentOrgId && orgs.length > 0) {
-          setSelectedOrgId(orgs[0].id);
-        }
+      return data.flatMap((row: any) => {
+        const orgData = row.organizations;
+        const orgsArray = Array.isArray(orgData) ? orgData : [orgData];
+        return orgsArray
+          .filter((org: any) => org?.id)
+          .map((org: any) => ({
+            id: org.id,
+            name: org.name,
+            logo: org.logo_url,
+          }));
+      });
+    } catch (error) {
+      console.error('Error fetching organizations:', error);
+      toast.error('Failed to load organizations');
+      return [];
+    }
+  }, [supabase]);
+
+  // Initialize component
+  useEffect(() => {
+    const initialize = async () => {
+      const orgs = await fetchOrganizations();
+      setOrganizations(orgs);
+
+      // Set selected organization from URL params
+      if (params.id) {
+        setSelectedOrgId(params.id as string);
+      } else if (orgs.length > 0) {
+        setSelectedOrgId(orgs[0].id);
       }
+
       setLoading(false);
     };
 
-    fetchOrganizations();
-  }, [currentOrgId, supabase]);
+    initialize();
+  }, [fetchOrganizations, params.id]);
+
+  // Handle organization change
+  const handleOrganizationChange = useCallback(
+    (orgId: string) => {
+      if (orgId === 'create') {
+        setIsModalOpen(true);
+        return;
+      }
+
+      if (orgId === 'leave') {
+        router.push('/organization/leave');
+        return;
+      }
+
+      // Only navigate if the organization is different
+      if (orgId !== params.id) {
+        router.push(`/organization/${orgId}`);
+      }
+    },
+    [router, params.id],
+  );
 
   return (
     <>
@@ -139,61 +133,68 @@ export function OrganizationSwitcher({
         <Select
           value={selectedOrgId}
           onValueChange={(val) => {
-            if (val !== selectedOrgId) {
-              handleOrganizationAction(val);
-            }
+            setSelectedOrgId(val);
+            handleOrganizationChange(val);
           }}
+          disabled={loading || !organizations.length}
         >
           <SelectTrigger style={appearance?.elements?.trigger}>
             {loading ? (
               <div className='flex items-center gap-2'>
                 <Loader2 className='h-4 w-4 animate-spin' />
+                <span>Loading organizations...</span>
               </div>
             ) : (
-              <SelectValue placeholder='Select organization' />
+              <SelectValue
+                placeholder={
+                  organizations.length
+                    ? 'Select organization'
+                    : 'No organizations'
+                }
+              />
             )}
           </SelectTrigger>
-          <SelectContent>
-            {organizations.map((org) => (
+          {organizations.length > 0 && (
+            <SelectContent>
+              {organizations.map((org) => (
+                <SelectItem
+                  key={org.id}
+                  value={org.id}
+                  style={appearance?.elements?.item}
+                >
+                  <div className='flex items-center gap-2'>
+                    {org.logo ? (
+                      <img
+                        src={org.logo}
+                        alt={org.name}
+                        className='h-5 w-5 rounded-full object-cover'
+                      />
+                    ) : (
+                      <span className='flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs font-medium'>
+                        {org.name.charAt(0)}
+                      </span>
+                    )}
+                    {org.name}
+                  </div>
+                </SelectItem>
+              ))}
               <SelectItem
-                key={org.id}
-                value={org.id}
+                value='create'
                 style={appearance?.elements?.item}
               >
                 <div className='flex items-center gap-2'>
-                  {org.logo ? (
-                    <img
-                      src={org.logo}
-                      alt={org.name}
-                      className='h-5 w-5 rounded-full object-cover'
-                    />
-                  ) : (
-                    <span className='flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs font-medium'>
-                      {org.name.charAt(0)}
-                    </span>
-                  )}
-                  {org.name}
+                  <Plus className='h-4 w-4' />
+                  Create Organization
                 </div>
               </SelectItem>
-            ))}
-            <SelectItem
-              value='create'
-              style={appearance?.elements?.item}
-            >
-              <div className='flex items-center gap-2'>
-                <Plus className='h-4 w-4' />
-                Create Organization
-              </div>
-            </SelectItem>
-            {organizations.length > 0 && (
               <SelectItem
                 value='leave'
                 style={appearance?.elements?.item}
               >
                 Leave Organization
               </SelectItem>
-            )}
-          </SelectContent>
+            </SelectContent>
+          )}
         </Select>
       </div>
 

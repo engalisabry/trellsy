@@ -36,7 +36,7 @@ export function CreateOrganization() {
   const [role, setRole] = useState<'admin' | 'member'>('admin');
   const [loading, setLoading] = useState(false);
   const [organizations, setOrganizations] = useState<OrganizationMember[]>([]);
-  console.log(organizations);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);

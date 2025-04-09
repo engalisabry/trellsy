@@ -1,3 +1,6 @@
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 const Layout = ({ children }: { children: React.ReactNode }) => {
   return (
     <main className='mx-auto max-w-6xl px-4 pt-20 md:pt-24 2xl:max-w-screen-xl'>
