@@ -43,7 +43,7 @@ export function OrganizationSwitcher({
 }: OrganizationSwitcherProps) {
   const supabase = createClient();
   const router = useRouter();
-  const pathname = usePathname();
+
   const params = useParams();
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -87,16 +87,14 @@ export function OrganizationSwitcher({
     }
   }, [supabase]);
 
-  // Initialize component
+  // Initialize component once on mount
   useEffect(() => {
     const initialize = async () => {
       const orgs = await fetchOrganizations();
       setOrganizations(orgs);
 
-      // Set selected organization from URL params
-      if (params.id) {
-        setSelectedOrgId(params.id as string);
-      } else if (orgs.length > 0) {
+      // Set initial selected organization
+      if (orgs.length > 0) {
         setSelectedOrgId(orgs[0].id);
       }
 
@@ -104,7 +102,22 @@ export function OrganizationSwitcher({
     };
 
     initialize();
-  }, [fetchOrganizations, params.id]);
+  }, [fetchOrganizations]);
+
+  // Update selected organization when params.id changes
+  useEffect(() => {
+    // Only update if:
+    // 1. params.id exists
+    // 2. It's different from current selectedOrgId
+    // 3. It's a valid organization ID (exists in organizations array)
+    if (
+      params.id &&
+      params.id !== selectedOrgId &&
+      organizations.some((org) => org.id === params.id)
+    ) {
+      setSelectedOrgId(params.id as string);
+    }
+  }, [params.id, organizations, selectedOrgId]);
 
   // Handle organization change
   const handleOrganizationChange = useCallback(

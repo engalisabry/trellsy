@@ -1,13 +1,6 @@
-// app/organization/[id]/page.tsx
-'use client';
-
-import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { useParams, useRouter } from 'next/navigation';
-import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase/client';
-
-// app/organization/[id]/page.tsx
+import { redirect } from 'next/navigation';
+import { createClient } from '@/lib/supabase/server';
 
 type OrgType = {
   id: string;
@@ -15,59 +8,65 @@ type OrgType = {
   logo_url: string | null;
 };
 
-export default function OrganizationPage() {
-  const supabase = createClient();
-  const [organization, setOrganization] = useState<OrgType | null>(null);
-  const params = useParams();
-  const [loading, setLoading] = useState(true);
-  const router = useRouter();
+export default async function OrganizationPage({
+  params: maybeParams,
+}: {
+  params: { id: string } | Promise<{ id: string }>;
+}) {
+  // Ensure params is resolved
+  const params = await Promise.resolve(maybeParams);
+  const supabase = await createClient();
 
-  useEffect(() => {
-    const fetchOrganization = async () => {
-      const orgId = params.id as string;
-      if (!orgId) return;
+  let organization: OrgType | null = null;
+  let errorMessage: string | null = null;
 
-      try {
-        setLoading(true);
+  try {
+    // Verify auth with caching
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
-        // Verify auth
-        const {
-          data: { user },
-          error: authError,
-        } = await supabase.auth.getUser();
-        if (authError || !user) {
-          router.push('/login');
-          return toast.error('Authentication required');
-        }
+    if (authError || !user) {
+      errorMessage = 'Authentication required. Please login.';
+    } else {
+      // Fetch org data with caching using Next.js fetch
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/organizations?id=eq.${params.id}&select=id,name,logo_url`,
+        {
+          headers: {
+            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
+          },
+          cache: 'force-cache',
+        },
+      );
 
-        // Fetch org data
-        const { data, error } = await supabase
-          .from('organizations')
-          .select('id, name, logo_url')
-          .eq('id', orgId)
-          .single();
+      if (!response.ok) throw new Error('Failed to fetch organization');
+      const [data] = await response.json();
+      organization = data;
+    }
+  } catch (error) {
+    console.error('Error:', error);
+    errorMessage = 'Failed to load organization data';
+  }
 
-        if (error) throw error;
+  if (errorMessage) {
+    return (
+      <div className='p-4'>
+        <h1 className='mb-4 text-2xl font-bold'>Error</h1>
+        <p className='text-red-500'>{errorMessage}</p>
+      </div>
+    );
+  }
 
-        if (data) {
-          setOrganization(data);
-        } else {
-          toast.error('Organization not found');
-          router.push('/organization');
-        }
-      } catch (error) {
-        console.error('Error:', error);
-        toast.error('Failed to load data');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchOrganization();
-  }, [params.id, router, supabase]);
-
-  if (loading) return <div>Loading...</div>;
-  if (!organization) return <div>Not available</div>;
+  if (!organization) {
+    return (
+      <div className='p-4'>
+        <h1 className='mb-4 text-2xl font-bold'>Organization Not Found</h1>
+      </div>
+    );
+  }
 
   return (
     <div className='p-4'>
