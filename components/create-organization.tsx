@@ -22,12 +22,6 @@ import {
 } from '@/components/ui/select';
 import { createClient } from '@/lib/supabase/client';
 
-interface OrganizationMember {
-  organization_id: string;
-  organizations: {
-    name: string;
-  };
-}
 export function CreateOrganization() {
   const supabase = createClient();
   const router = useRouter();
@@ -35,7 +29,6 @@ export function CreateOrganization() {
   const [logo, setLogo] = useState<File | null>(null);
   const [role, setRole] = useState<'admin' | 'member'>('admin');
   const [loading, setLoading] = useState(false);
-  const [organizations, setOrganizations] = useState<OrganizationMember[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -123,11 +116,11 @@ export function CreateOrganization() {
           )
           .eq('user_id', user.id);
 
-        if (!error && data) {
-          console.log('Organizations data:', data); // Add this line
-          // @ts-expect-error - Supabase returns correct shape that matches our interface
-          setOrganizations(data as OrganizationMember[]);
-        }
+        // if (!error && data) {
+        //   console.log('Organizations data:', data);
+        //   // @ts-expect-error - Supabase returns correct shape that matches our interface
+        //   setOrganizations(data as OrganizationMember[]);
+        // }
       };
 
       toast.success('Organization created successfully!');

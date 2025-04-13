@@ -19,6 +19,7 @@ export const Logo = () => {
           alt='logo'
           width='35'
           height='35'
+          priority
           className='scale-150'
         />
         <p className={cn('pb-1 text-lg', calFontHeading.className)}>Trellsy</p>

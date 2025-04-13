@@ -1,89 +1,150 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import type { Organization } from '@/types';
+import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 
-interface Organization {
+interface UserMembership {
   id: string;
-  name: string;
-  logo?: string | null;
+  role: string;
+  created_at: string;
+  organization: Organization;
+}
+
+interface UseOrganizationListOptions {
+  userMembership?: {
+    infinite?: boolean;
+  };
 }
 
 interface UseOrganizationListResult {
   organizations: Organization[];
+  isLoading: boolean;
+  isError: Error | string;
+  userMembership: UserMembership[];
   activeOrganization: Organization | null;
   setActive: (params: { organization: string }) => void;
 }
 
-export function useOrganizationList(): UseOrganizationListResult {
+export function useOrganizationList(
+  options?: UseOrganizationListOptions,
+): UseOrganizationListResult {
   const supabase = createClient();
   const router = useRouter();
-  // Optionally, if you want to read an organization id from the URL on mount.
   const searchParams = useSearchParams();
   const initialOrgId = searchParams?.get('organization') || '';
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [userMembership, setUserMembership] = useState<UserMembership[]>([]);
   const [activeOrganization, setActiveOrganization] =
     useState<Organization | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState<Error | string>('');
 
-  // Fetch organizations from supabase
   useEffect(() => {
     const fetchOrganizations = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+      setIsLoading(true);
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
 
-      const { data, error } = await supabase
-        .from('organization_members')
-        .select('organizations(id, name, logo_url)')
-        .eq('user_id', user.id);
-
-      if (!error && data) {
-        // Handle scenario where each row's organizations field might be an object or an array.
-        const orgs = data
-          .map((row: any) => {
-            const orgArray = Array.isArray(row.organizations)
-              ? row.organizations
-              : [row.organizations];
-            return orgArray.map((org: any) => ({
-              id: org.id,
-              name: org.name,
-              logo: org.logo_url,
-            }));
-          })
-          .flat()
-          .filter(Boolean);
-
-        setOrganizations(orgs);
-
-        // If there is an org id in URL, try to match it.
-        if (initialOrgId) {
-          const found = orgs.find((o) => o.id === initialOrgId);
-          if (found) {
-            setActiveOrganization(found);
-          } else if (orgs.length) {
-            // fallback to the first org if the provided org isn't found.
-            setActiveOrganization(orgs[0]);
-          }
-        } else if (orgs.length) {
-          // If there's no URL param then use the first found organization.
-          setActiveOrganization(orgs[0]);
+        if (!user) {
+          toast.error('Please login first', {
+            action: {
+              label: 'login',
+              onClick: () => router.push(`/auth/login`),
+            },
+          });
         }
+
+        const query = supabase
+          .from('organization_members')
+          .select(
+            `
+            id,
+            role,
+            created_at,
+            organizations(id, name, logo_url)
+          `,
+          )
+          .eq('user_id', user?.id);
+
+        if (options?.userMembership?.infinite) {
+          //  pagination logic here
+        }
+
+        const { data, error } = await query;
+
+        if (!error && data) {
+          const memberships = data.map((m) => {
+            const orgArray = Array.isArray(m.organizations)
+              ? m.organizations
+              : [m.organizations];
+
+            const org = orgArray[0];
+
+            return {
+              id: m.id,
+              role: m.role,
+              created_at: m.created_at,
+              organization: {
+                id: org.id,
+                name: org.name,
+                logo: org.logo_url || null,
+              },
+            };
+          });
+
+          const orgs = memberships.map((m) => m.organization);
+
+          setUserMembership(memberships);
+          setOrganizations(orgs);
+
+          const initialOrg =
+            orgs.find((o) => o.id === initialOrgId) || orgs[0] || null;
+          setActiveOrganization(initialOrg);
+        }
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : 'Something went wrong',
+          {
+            action: {
+              label: 'login',
+              onClick: () => router.push(`/auth/login`),
+            },
+          },
+        );
+        error instanceof Error
+          ? setIsError(error.message)
+          : setIsError('Something went wrong');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchOrganizations();
-  }, [initialOrgId, supabase]);
-  const setActive = ({ organization }: { organization: string }) => {
-    const org = organizations.find((o) => o.id === organization);
-    if (org) {
-      setActiveOrganization(org);
+  }, [initialOrgId, supabase, options?.userMembership?.infinite]);
 
-      router.push(`/organization/${org.id}`);
-    }
+  const setActive = useCallback(
+    ({ organization }: { organization: string }) => {
+      const org = organizations.find((o) => o.id === organization);
+      if (org && activeOrganization?.id !== org.id) {
+        setActiveOrganization(org);
+        router.push(`/organization/${org.id}`);
+      }
+    },
+    [organizations, activeOrganization, router],
+  );
+
+  return {
+    organizations,
+    isLoading,
+    isError,
+    userMembership,
+    activeOrganization,
+    setActive,
   };
-
-  return { organizations, activeOrganization, setActive };
 }

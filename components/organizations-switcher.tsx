@@ -1,9 +1,8 @@
 'use client';
 
-import { CSSProperties, useCallback, useEffect, useState } from 'react';
-import { useParams, usePathname, useRouter } from 'next/navigation';
+import { CSSProperties, useState } from 'react';
+import Image from 'next/image';
 import { Loader2, Plus } from 'lucide-react';
-import { toast } from 'sonner';
 import { CreateOrganization } from '@/components/create-organization';
 import {
   Dialog,
@@ -18,15 +17,9 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from '@/components/ui/select';
-import { createClient } from '@/lib/supabase/client';
-
-interface Organization {
-  id: string;
-  name: string;
-  logo?: string | null;
-}
+import { useOrganizationList } from '@/hooks/use-organization-list';
+import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 
 interface OrganizationSwitcherProps {
   appearance?: {
@@ -41,115 +34,33 @@ interface OrganizationSwitcherProps {
 export function OrganizationSwitcher({
   appearance,
 }: OrganizationSwitcherProps) {
-  const supabase = createClient();
-  const router = useRouter();
+  const { organizations, activeOrganization, setActive } =
+    useOrganizationList();
 
-  const params = useParams();
-
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const loading = organizations.length === 0 && !activeOrganization;
 
-  // Fetch organizations with error handling
-  const fetchOrganizations = useCallback(async () => {
-    try {
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !user) {
-        throw new Error('Authentication required');
-      }
-
-      const { data, error } = await supabase
-        .from('organization_members')
-        .select('organizations(id, name, logo_url)')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
-      return data.flatMap((row: any) => {
-        const orgData = row.organizations;
-        const orgsArray = Array.isArray(orgData) ? orgData : [orgData];
-        return orgsArray
-          .filter((org: any) => org?.id)
-          .map((org: any) => ({
-            id: org.id,
-            name: org.name,
-            logo: org.logo_url,
-          }));
-      });
-    } catch (error) {
-      console.error('Error fetching organizations:', error);
-      toast.error('Failed to load organizations');
-      return [];
+  const handleOrganizationChange = (orgId: string) => {
+    if (orgId === 'create') {
+      setIsModalOpen(true);
+      return;
     }
-  }, [supabase]);
 
-  // Initialize component once on mount
-  useEffect(() => {
-    const initialize = async () => {
-      const orgs = await fetchOrganizations();
-      setOrganizations(orgs);
-
-      // Set initial selected organization
-      if (orgs.length > 0) {
-        setSelectedOrgId(orgs[0].id);
-      }
-
-      setLoading(false);
-    };
-
-    initialize();
-  }, [fetchOrganizations]);
-
-  // Update selected organization when params.id changes
-  useEffect(() => {
-    // Only update if:
-    // 1. params.id exists
-    // 2. It's different from current selectedOrgId
-    // 3. It's a valid organization ID (exists in organizations array)
-    if (
-      params.id &&
-      params.id !== selectedOrgId &&
-      organizations.some((org) => org.id === params.id)
-    ) {
-      setSelectedOrgId(params.id as string);
+    if (orgId === 'leave') {
+      // Handle leave organization logic
+      return;
     }
-  }, [params.id, organizations, selectedOrgId]);
 
-  // Handle organization change
-  const handleOrganizationChange = useCallback(
-    (orgId: string) => {
-      if (orgId === 'create') {
-        setIsModalOpen(true);
-        return;
-      }
-
-      if (orgId === 'leave') {
-        router.push('/organization/leave');
-        return;
-      }
-
-      // Only navigate if the organization is different
-      if (orgId !== params.id) {
-        router.push(`/organization/${orgId}`);
-      }
-    },
-    [router, params.id],
-  );
+    setActive({ organization: orgId });
+  };
 
   return (
     <>
       <div style={appearance?.elements?.rootBox}>
         <Select
-          value={selectedOrgId}
-          onValueChange={(val) => {
-            setSelectedOrgId(val);
-            handleOrganizationChange(val);
-          }}
-          disabled={loading || !organizations.length}
+          value={activeOrganization?.id || ''}
+          onValueChange={handleOrganizationChange}
+          disabled={loading}
         >
           <SelectTrigger style={appearance?.elements?.trigger}>
             {loading ? (
@@ -158,56 +69,69 @@ export function OrganizationSwitcher({
                 <span>Loading organizations...</span>
               </div>
             ) : (
-              <SelectValue
-                placeholder={
-                  organizations.length
-                    ? 'Select organization'
-                    : 'No organizations'
-                }
-              />
-            )}
-          </SelectTrigger>
-          {organizations.length > 0 && (
-            <SelectContent>
-              {organizations.map((org) => (
-                <SelectItem
-                  key={org.id}
-                  value={org.id}
-                  style={appearance?.elements?.item}
-                >
-                  <div className='flex items-center gap-2'>
-                    {org.logo ? (
-                      <img
-                        src={org.logo}
-                        alt={org.name}
+              <div className='flex w-full items-center gap-2'>
+                {activeOrganization ? (
+                  <>
+                    {activeOrganization.logo ? (
+                      <Image
+                        src={activeOrganization.logo}
+                        alt={activeOrganization.name}
+                        width={20}
+                        height={20}
                         className='h-5 w-5 rounded-full object-cover'
                       />
                     ) : (
                       <span className='flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs font-medium'>
-                        {org.name.charAt(0)}
+                        {activeOrganization.name.charAt(0)}
                       </span>
                     )}
-                    {org.name}
-                  </div>
-                </SelectItem>
-              ))}
+                    <span className='truncate'>{activeOrganization.name}</span>
+                  </>
+                ) : (
+                  <span>No organizations</span>
+                )}
+              </div>
+            )}
+          </SelectTrigger>
+          <SelectContent>
+            {organizations.map((organization) => (
               <SelectItem
-                value='create'
+                key={organization.id}
+                value={organization.id}
                 style={appearance?.elements?.item}
               >
                 <div className='flex items-center gap-2'>
-                  <Plus className='h-4 w-4' />
-                  Create Organization
+                  <Avatar className='h-8 w-8'>
+                    <AvatarImage
+                      src={`${organization.logo}`}
+                      alt={organization.name || 'organization logo'}
+                    />
+                    <AvatarFallback>
+                      {organization.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {organization.name}
                 </div>
               </SelectItem>
+            ))}
+            <SelectItem
+              value='create'
+              style={appearance?.elements?.item}
+            >
+              <div className='flex items-center gap-2'>
+                <Plus className='h-4 w-4' />
+                Create Organization
+              </div>
+            </SelectItem>
+            {organizations.length > 0 && (
               <SelectItem
                 value='leave'
                 style={appearance?.elements?.item}
               >
                 Leave Organization
               </SelectItem>
-            </SelectContent>
-          )}
+            )}
+          </SelectContent>
         </Select>
       </div>
 
@@ -223,7 +147,6 @@ export function OrganizationSwitcher({
             </DialogDescription>
           </DialogHeader>
           <CreateOrganization />
-          <DialogClose onClick={() => setIsModalOpen(false)}>Close</DialogClose>
         </DialogContent>
       </Dialog>
     </>
