@@ -1,47 +1,27 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { LoaderCircle } from 'lucide-react';
-import { toast } from 'sonner';
-import { createClient } from '@/lib/supabase/client';
+import { useAuthStore } from '@/lib/stores';
 import { Button } from './ui/button';
 
 export const GoogleButton = () => {
+  const { loginWithGoogle } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
-  const signinWithGoogle = async (e: React.FormEvent) => {
+  const handleGoogleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
     setIsLoading(true);
-
     try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        },
-      });
-
-      if (error) {
-        return toast.error(error.message);
-      }
-      router.push('/protected');
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return toast.error(error?.message);
-      } else {
-        return 'An error occurred';
-      }
+      await loginWithGoogle();
     } finally {
       setIsLoading(false);
     }
   };
+
+  // if (isSuccess) {
+  //   router.push('/organization');
+  // }
 
   return (
     <div className='flex justify-center'>
@@ -50,7 +30,7 @@ export const GoogleButton = () => {
         type='button'
         size='sm'
         className='inline-flex w-full justify-center'
-        onClick={signinWithGoogle}
+        onClick={handleGoogleSignIn}
       >
         {isLoading ? (
           <LoaderCircle className='h-4 w-4 animate-spin' />
@@ -84,7 +64,6 @@ export const GoogleButton = () => {
             Google
           </>
         )}
-        {/* <LoaderCircle className='h-4 w-4 animate-spin' /> */}
       </Button>
     </div>
   );

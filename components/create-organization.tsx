@@ -4,196 +4,108 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { createClient } from '@/lib/supabase/client';
+import { uploadOrganizationLogo } from '@/lib/services/organization.service';
+import { useOrganizationStore } from '@/lib/stores';
+import { slugify } from '@/lib/utils';
 
 export function CreateOrganization() {
-  const supabase = createClient();
   const router = useRouter();
+  const { createOrganization, isLoading } = useOrganizationStore();
   const [name, setName] = useState('');
+  const [slug, setSlug] = useState('');
   const [logo, setLogo] = useState<File | null>(null);
-  const [role, setRole] = useState<'admin' | 'member'>('admin');
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+
+  // Combine local and store loading states
+  const isSubmitting = isLoading || localLoading;
+
+  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newName = e.target.value;
+    setName(newName);
+
+    setSlug(slugify(newName));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+
+    if (!name || !slug) {
+      return;
+    }
+    let logo_url = null;
+    if (logo) {
+      logo_url = await uploadOrganizationLogo(logo, slug);
+    }
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error('No active session');
+      setLocalLoading(true);
+      await createOrganization({ name, slug, logo_url });
 
-      {
-        /* Create organization */
-      }
-
-      const { data: orgData, error: orgError } = await supabase
-        .from('organizations')
-        .insert({
-          name,
-          slug: name.toLowerCase().replace(/\s+/g, '-'),
-        })
-        .select()
-        .single();
-
-      if (orgError) return toast.error(orgError.message);
-
-      {
-        /* Upload Org Logo */
-      }
-      if (logo) {
-        const fileExt = logo.name.split('.').pop();
-        const fileName = `${orgData.id}-${Date.now()}.${fileExt}`;
-        const filePath = `org-logos/${fileName}`;
-
-        const { data: buckets } = await supabase.storage.listBuckets();
-        if (!buckets?.some((b) => b.name === 'organization-logos')) {
-          await supabase.storage.createBucket('organization-logos', {
-            public: true,
-            allowedMimeTypes: ['image/*'],
-            fileSizeLimit: 5 * 1024 * 1024, // 5MB
-          });
-        }
-
-        const { error: uploadError } = await supabase.storage
-          .from('organization-logos')
-          .upload(filePath, logo);
-
-        if (!uploadError) {
-          const {
-            data: { publicUrl },
-          } = supabase.storage
-            .from('organization-logos')
-            .getPublicUrl(filePath);
-
-          await supabase
-            .from('organizations')
-            .update({ logo_url: publicUrl })
-            .eq('id', orgData.id);
-        }
-      }
-
-      // Add current user with selected role
-      await supabase.from('organization_members').insert({
-        organization_id: orgData.id,
-        user_id: session.user.id,
-        role: role,
-      });
-
-      {
-        /* fetch user's organizations */
-      }
-      const fetchUserOrganizations = async () => {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
-        if (!user) return;
-
-        const { data, error } = await supabase
-          .from('organization_members')
-          .select(
-            `
-            organization_id, 
-            organizations:organizations!inner(name)
-          `,
-          )
-          .eq('user_id', user.id);
-
-        // if (!error && data) {
-        //   console.log('Organizations data:', data);
-        //   // @ts-expect-error - Supabase returns correct shape that matches our interface
-        //   setOrganizations(data as OrganizationMember[]);
-        // }
-      };
-
-      toast.success('Organization created successfully!');
-      await fetchUserOrganizations();
-      router.push(`/organization`);
+      router.push('/organization');
+      router.refresh();
     } catch (error) {
-      console.error('Error:', error);
       toast.error(
-        error instanceof Error ? error.message : 'Organization creation failed',
+        error instanceof Error ? error.message : 'Error creating organization',
       );
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
   return (
     <div className='flex flex-col gap-6'>
-      <Card>
-        <CardHeader>
-          <CardTitle className='text-2xl'>Create Organization</CardTitle>
-          <CardDescription>
-            Set up your organization to get started
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit}>
-            <div className='flex flex-col gap-6'>
-              <div className='grid gap-2'>
-                <Label htmlFor='name'>Organization Name</Label>
-                <Input
-                  id='name'
-                  type='text'
-                  placeholder='Acme Inc'
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </div>
-              <div className='grid gap-2'>
-                <Label htmlFor='logo'>Logo (Optional)</Label>
-                <Input
-                  id='logo'
-                  type='file'
-                  accept='image/*'
-                  onChange={(e) => setLogo(e.target.files?.[0] || null)}
-                />
-              </div>
-              <div className='grid gap-2'>
-                <Label htmlFor='role'>Your Role</Label>
-                <Select
-                  value={role}
-                  onValueChange={(value: 'admin' | 'member') => setRole(value)}
-                >
-                  <SelectTrigger className='w-full'>
-                    <SelectValue placeholder='Select role' />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value='admin'>Admin</SelectItem>
-                    <SelectItem value='member'>Member</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button
-                type='submit'
-                className='w-full'
-                disabled={loading}
-              >
-                {loading ? 'Creating...' : 'Create Organization'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <form
+        onSubmit={handleSubmit}
+        className='space-y-4 pt-4'
+      >
+        <div className='space-y-2'>
+          <Label htmlFor='name'>Organization Name</Label>
+          <Input
+            id='name'
+            placeholder='Acme Inc.'
+            value={name}
+            onChange={handleNameChange}
+            disabled={isSubmitting}
+            required
+          />
+        </div>
+
+        <div className='space-y-2'>
+          <Label htmlFor='slug'>Slug (URL-friendly name)</Label>
+          <Input
+            id='slug'
+            placeholder='acme-inc'
+            value={slug}
+            onChange={(e) => setSlug(e.target.value)}
+            disabled={isSubmitting}
+            required
+          />
+          <p className='text-muted-foreground text-xs'>
+            This will be used in URLs: trellsy.com/organization/
+            {slug || 'your-slug'}
+          </p>
+        </div>
+        <div className='space-y-2'>
+          <Label htmlFor='logo'>Logo</Label>
+          <Input
+            id='logo'
+            type='file'
+            onChange={(e) => setLogo(e.target.files?.[0] || null)}
+            disabled={isSubmitting}
+            required
+          />
+        </div>
+
+        <Button
+          type='submit'
+          className='w-full'
+          disabled={isSubmitting || !name || !slug}
+        >
+          {isSubmitting ? 'Creating...' : 'Create Organization'}
+        </Button>
+      </form>
     </div>
   );
 }

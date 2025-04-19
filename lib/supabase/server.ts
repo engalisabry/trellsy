@@ -14,10 +14,10 @@ export type Session = {
   };
 };
 
-export const getSession = async (): Promise<Session | null> => {
+const createServerSupabaseClient = async () => {
   const cookieStore = await cookies();
 
-  const supabase = createServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -29,31 +29,47 @@ export const getSession = async (): Promise<Session | null> => {
           try {
             cookieStore.set({ name, value, ...options });
           } catch (error) {
-            // Handle error if needed
+            throw Error(
+              error instanceof Error ? error.message : 'Something went wrong',
+            );
           }
         },
         remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options });
           } catch (error) {
-            // Handle error if needed
+            throw Error(
+              error instanceof Error ? error.message : 'Something went wrong',
+            );
           }
         },
       },
     },
   );
+};
 
-  const { data } = await supabase.auth.getSession();
-  if (!data.session) return null;
+// Export the function with both names for compatibility
+export const createClient = createServerSupabaseClient;
+export { createServerSupabaseClient };
+
+export const getSession = async (): Promise<Session | null> => {
+  const supabase = await createServerSupabaseClient();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession();
+
+  if (userError || !userData.user || sessionError || !sessionData.session) {
+    return null;
+  }
 
   return {
-    access_token: data.session.access_token,
-    refresh_token: data.session.refresh_token,
-    expires_in: data.session.expires_in,
-    token_type: data.session.token_type,
+    access_token: sessionData.session.access_token,
+    refresh_token: sessionData.session.refresh_token,
+    expires_in: sessionData.session.expires_in,
+    token_type: sessionData.session.token_type,
     user: {
-      id: data.session.user.id,
-      email: data.session.user.email || '',
+      id: userData.user.id,
+      email: userData.user.email || '',
     },
   };
 };
