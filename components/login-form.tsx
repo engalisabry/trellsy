@@ -2,8 +2,6 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -14,7 +12,7 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { createClient } from '@/lib/supabase/client';
+import { useAuthStore } from '@/lib/stores';
 import { cn } from '@/lib/utils';
 import { GoogleButton } from './google-button';
 
@@ -24,33 +22,21 @@ export function LoginForm({
 }: React.ComponentPropsWithoutRef<'div'>) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [localLoading, setLocalLoading] = useState(false);
+  const { login, isLoading: storeLoading } = useAuthStore();
 
-  const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
+  const isLoading = localLoading || storeLoading;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
+    if (isLoading) return;
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-      router.push('/protected');
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        return toast.error(error?.message);
-      } else {
-        return 'An error occurred';
-      }
-    } finally {
-      setIsLoading(false);
+      setLocalLoading(true);
+      await login(email, password);
+    } catch (error) {
+      setLocalLoading(false);
+      console.error('Login error:', error);
     }
   };
 
@@ -82,6 +68,7 @@ export function LoginForm({
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
               <div className='grid gap-2'>
@@ -100,6 +87,7 @@ export function LoginForm({
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  disabled={isLoading}
                 />
               </div>
 

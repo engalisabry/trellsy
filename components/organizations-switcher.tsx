@@ -1,12 +1,13 @@
 'use client';
 
-import { CSSProperties, useState } from 'react';
-import Image from 'next/image';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import type { Organization, OrganizationSwitcherProps } from '@/types';
 import { Loader2, Plus } from 'lucide-react';
+import { toast } from 'sonner';
 import { CreateOrganization } from '@/components/create-organization';
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -18,29 +19,58 @@ import {
   SelectItem,
   SelectTrigger,
 } from '@/components/ui/select';
-import { useOrganizationList } from '@/hooks/use-organization-list';
+import { useOrganizationStore } from '@/lib/stores';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-
-interface OrganizationSwitcherProps {
-  appearance?: {
-    elements?: {
-      rootBox?: CSSProperties;
-      trigger?: CSSProperties;
-      item?: CSSProperties;
-    };
-  };
-}
 
 export function OrganizationSwitcher({
   appearance,
 }: OrganizationSwitcherProps) {
-  const { organizations, activeOrganization, setActive } =
-    useOrganizationList();
+  const router = useRouter();
 
+  const { fetchOrganizations, organizations } = useOrganizationStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const loading = organizations.length === 0 && !activeOrganization;
+  const [activeOrganization, setActiveOrganization] =
+    useState<Organization | null>(null);
+  const [localLoading, setLocalLoading] = useState(true);
 
-  const handleOrganizationChange = (orgId: string) => {
+  const orgs = useMemo(
+    () => (Array.isArray(organizations) ? organizations : []),
+    [organizations],
+  );
+
+  console.log(organizations);
+
+  // Fetch organizations on mount
+  useEffect(() => {
+    setLocalLoading(true);
+
+    fetchOrganizations()
+      .then(() => {})
+      .catch((error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Error fetching organizations',
+        );
+      })
+      .finally(() => {
+        setLocalLoading(false);
+      });
+  }, [fetchOrganizations]);
+
+  // Set the first organization as active by default
+  useEffect(() => {
+    if (orgs.length > 0) {
+      if (
+        !activeOrganization ||
+        !orgs.find((org) => org.id === activeOrganization.id)
+      ) {
+        setActiveOrganization(orgs[0]);
+      }
+    }
+  }, [orgs, activeOrganization]);
+
+  const handleOrganizationChange = async (orgId: string) => {
     if (orgId === 'create') {
       setIsModalOpen(true);
       return;
@@ -48,53 +78,83 @@ export function OrganizationSwitcher({
 
     if (orgId === 'leave') {
       // Handle leave organization logic
+      toast.info('Leave organization feature coming soon');
       return;
     }
 
-    setActive({ organization: orgId });
+    const selectedOrg = orgs.find((org) => org.id === orgId);
+    if (selectedOrg) {
+      setActiveOrganization(selectedOrg);
+      router.push(`/organization/${selectedOrg.id}`);
+    }
+  };
+
+  const renderTriggerContent = () => {
+    // Use local loading state instead of the global one
+    if (localLoading) {
+      return (
+        <div className='flex items-center gap-2'>
+          <Loader2 className='h-4 w-4 animate-spin' />
+          <span>Loading organizations...</span>
+        </div>
+      );
+    }
+
+    if (orgs.length === 0) {
+      return <span>No organizations</span>;
+    }
+
+    if (!activeOrganization && orgs.length > 0) {
+      const firstOrg = orgs[0];
+      return (
+        <div className='flex w-full items-center gap-2'>
+          <Avatar className='h-5 w-5'>
+            <AvatarImage
+              src={firstOrg.logo_url as string}
+              alt={firstOrg.name || 'Organization'}
+            />
+            <AvatarFallback className='text-xs'>
+              {firstOrg.name ? firstOrg.name.charAt(0).toUpperCase() : '?'}
+            </AvatarFallback>
+          </Avatar>
+          <span className='truncate'>{firstOrg.name ?? 'Organization'}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className='flex w-full items-center gap-2'>
+        <Avatar className='h-5 w-5'>
+          <AvatarImage
+            src={activeOrganization?.logo_url as string}
+            alt={activeOrganization?.name || 'Organization'}
+          />
+          <AvatarFallback className='text-xs'>
+            {activeOrganization?.name
+              ? activeOrganization.name.charAt(0).toUpperCase()
+              : '?'}
+          </AvatarFallback>
+        </Avatar>
+        <span className='truncate'>
+          {activeOrganization?.name ?? 'Organization'}
+        </span>
+      </div>
+    );
   };
 
   return (
     <>
       <div style={appearance?.elements?.rootBox}>
         <Select
-          value={activeOrganization?.id || ''}
+          value={activeOrganization?.id || (orgs.length > 0 ? orgs[0].id : '')}
           onValueChange={handleOrganizationChange}
-          disabled={loading}
+          disabled={localLoading}
         >
           <SelectTrigger style={appearance?.elements?.trigger}>
-            {loading ? (
-              <div className='flex items-center gap-2'>
-                <Loader2 className='h-4 w-4 animate-spin' />
-                <span>Loading organizations...</span>
-              </div>
-            ) : (
-              <div className='flex w-full items-center gap-2'>
-                {activeOrganization ? (
-                  <>
-                    {activeOrganization.logo ? (
-                      <Image
-                        src={activeOrganization.logo}
-                        alt={activeOrganization.name}
-                        width={20}
-                        height={20}
-                        className='h-5 w-5 rounded-full object-cover'
-                      />
-                    ) : (
-                      <span className='flex h-5 w-5 items-center justify-center rounded-full bg-gray-200 text-xs font-medium'>
-                        {activeOrganization.name.charAt(0)}
-                      </span>
-                    )}
-                    <span className='truncate'>{activeOrganization.name}</span>
-                  </>
-                ) : (
-                  <span>No organizations</span>
-                )}
-              </div>
-            )}
+            {renderTriggerContent()}
           </SelectTrigger>
           <SelectContent>
-            {organizations.map((organization) => (
+            {orgs.map((organization) => (
               <SelectItem
                 key={organization.id}
                 value={organization.id}
@@ -103,14 +163,16 @@ export function OrganizationSwitcher({
                 <div className='flex items-center gap-2'>
                   <Avatar className='h-8 w-8'>
                     <AvatarImage
-                      src={`${organization.logo}`}
-                      alt={organization.name || 'organization logo'}
+                      src={organization.logo_url as string}
+                      alt={organization.name || 'Organization logo'}
                     />
                     <AvatarFallback>
-                      {organization.name.charAt(0)}
+                      {organization.name
+                        ? organization.name.charAt(0).toUpperCase()
+                        : '?'}
                     </AvatarFallback>
                   </Avatar>
-                  {organization.name}
+                  <span>{organization.name}</span>
                 </div>
               </SelectItem>
             ))}
@@ -123,7 +185,7 @@ export function OrganizationSwitcher({
                 Create Organization
               </div>
             </SelectItem>
-            {organizations.length > 0 && (
+            {orgs.length > 0 && (
               <SelectItem
                 value='leave'
                 style={appearance?.elements?.item}
@@ -137,7 +199,7 @@ export function OrganizationSwitcher({
 
       <Dialog
         open={isModalOpen}
-        onOpenChange={setIsModalOpen}
+        onOpenChange={() => setIsModalOpen(false)}
       >
         <DialogContent>
           <DialogHeader>

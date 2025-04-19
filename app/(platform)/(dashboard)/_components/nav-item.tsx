@@ -25,11 +25,10 @@ export const NavItem = ({
   onExpand,
   organization,
 }: NavItemProps) => {
-  const { id, name, logo } = organization;
+  const { id, name, logo_url } = organization;
   const pathname = usePathname();
   const router = useRouter();
 
-  console.log(logo);
   const routes = [
     {
       label: 'Boards',
@@ -73,13 +72,15 @@ export const NavItem = ({
           <div className='relative h-7 w-7'>
             <Avatar className='h-8 w-8'>
               <AvatarImage
-                src={`${logo}`}
+                src={`${logo_url}`}
                 alt={name || 'organization logo'}
               />
               <AvatarFallback>{name && name?.charAt(0)}</AvatarFallback>
             </Avatar>
           </div>
-          <span className='font-medium'>{name}</span>
+          <span className='ml-1 font-medium dark:text-[var(--primary)]'>
+            {name}
+          </span>
         </div>
       </AccordionTrigger>
 

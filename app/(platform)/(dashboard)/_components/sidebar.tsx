@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { Organization, SidebarProps } from '@/types';
 import { Plus } from 'lucide-react';
 import { useLocalStorage } from 'usehooks-ts';
 import { CreateOrganization } from '@/components/create-organization';
@@ -13,26 +14,42 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useOrganizationList } from '@/hooks/use-organization-list';
+import { useOrganizationStore } from '@/lib/stores';
 import { NavItem } from './nav-item';
 
-interface SidebarProps {
-  StorageKey?: string;
-}
-
 export const Sidebar = ({ StorageKey = 't-sidebar-state' }: SidebarProps) => {
-  const [expanded, setExpanded] = useLocalStorage<Record<string, any>>(
+  const [expanded, setExpanded] = useLocalStorage<Record<string, boolean>>(
     StorageKey,
     {},
   );
 
-  console.log(expanded);
-
-  const { isLoading, organizations, userMembership, activeOrganization } =
-    useOrganizationList();
+  const { organizations, memberships, isLoading, fetchOrganizations } =
+    useOrganizationStore();
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+
+  const orgs = useMemo(
+    () => (Array.isArray(organizations) ? organizations : []),
+    [organizations],
+  );
+
+  const mems = useMemo(
+    () => (Array.isArray(memberships) ? memberships : []),
+    [memberships],
+  );
+
+  const [activeOrganization, setActiveOrganization] =
+    useState<Organization | null>(orgs.length > 0 ? orgs[0] : null);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (orgs.length > 0 && !activeOrganization) {
+      setActiveOrganization(orgs[0]);
+    }
+  }, [orgs, activeOrganization]);
 
   const defaultAccordionValue: string[] = Object.keys(expanded).reduce(
     (acc: string[], key: string) => {
@@ -59,7 +76,7 @@ export const Sidebar = ({ StorageKey = 't-sidebar-state' }: SidebarProps) => {
   return (
     <>
       <div className='mb-1 flex items-center text-xs font-medium'>
-        <span className='pl-4'>Workspaces</span>
+        <span className='pl-4 font-bold'>Workspaces</span>
         <Button
           className='ml-auto'
           size='icon'
@@ -89,15 +106,27 @@ export const Sidebar = ({ StorageKey = 't-sidebar-state' }: SidebarProps) => {
         type='multiple'
         defaultValue={defaultAccordionValue}
       >
-        {userMembership.map((membership) => (
-          <NavItem
-            key={membership.id}
-            isActive={activeOrganization?.id === membership.organization.id}
-            isExpanded={expanded[membership.organization.id]}
-            organization={membership.organization}
-            onExpand={onExpand}
-          />
-        ))}
+        {orgs.map((org) => {
+          const membership = mems.find((m) => m.organization_id === org.id);
+          const { id, name, slug, logo_url } = org;
+
+          if (!membership) return null;
+
+          return (
+            <NavItem
+              key={membership.id}
+              isActive={activeOrganization?.id === org.id}
+              isExpanded={expanded[org.id]}
+              organization={{
+                id,
+                name,
+                slug,
+                logo_url,
+              }}
+              onExpand={onExpand}
+            />
+          );
+        })}
       </Accordion>
     </>
   );

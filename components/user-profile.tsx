@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { createClient } from '@/lib/supabase/client';
+import { ThemeToggle } from './theme-toggle';
 
 interface UserProfileData {
   id: string;
@@ -48,7 +49,7 @@ export function UserProfile() {
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
+      <DropdownMenuTrigger className='cursor-pointer'>
         <div className='relative'>
           {loading ? (
             <div className='flex h-8 w-8 items-center justify-center'>
@@ -85,6 +86,8 @@ export function UserProfile() {
             )}
           </div>
         </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <ThemeToggle />
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut}>Sign Out</DropdownMenuItem>
       </DropdownMenuContent>

@@ -1,21 +1,18 @@
 import { redirect } from 'next/navigation';
 import { CreateOrganization } from '@/components/create-organization';
-import { createClient } from '@/lib/supabase/server';
+import { createServerSupabaseClient, getSession } from '@/lib/supabase/server';
 
 export default async function CreateOrganizationPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
+  const session = await getSession();
+  if (!session) redirect('/auth/login');
 
-  if (error || !user) redirect('/login');
+  const supabase = await createServerSupabaseClient();
 
   // Check if user already has organizations
   const { data: organizations } = await supabase
     .from('organization_members')
     .select('organization_id')
-    .eq('user_id', user.id);
+    .eq('user_id', session.user.id);
 
   if (organizations?.length) {
     redirect('/organization');
@@ -24,7 +21,7 @@ export default async function CreateOrganizationPage() {
   return (
     <div className='flex min-h-svh w-full items-center justify-center p-6 md:p-10'>
       <div className='w-full max-w-sm'>
-        <CreateOrganization />;
+        <CreateOrganization />
       </div>
     </div>
   );
