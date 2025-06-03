@@ -13,7 +13,10 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { createClient } from '@/lib/supabase/client';
+import {
+  resendVerificationEmail,
+  signupWithEmailPassword,
+} from '@/lib/services/auth.service';
 import { cn } from '@/lib/utils';
 import { GoogleButton } from './google-button';
 
@@ -26,11 +29,13 @@ export function SignUpForm({
   const [repeatPassword, setRepeatPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [signupSuccess, setSignupSuccess] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState('');
   const router = useRouter();
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
+
     setIsLoading(true);
     setError(null);
 
@@ -41,21 +46,66 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
-        },
-      });
-      if (error) throw error;
-      router.push('/auth/sign-up-success');
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : 'An error occurred');
+      const result = await signupWithEmailPassword(email, password);
+      if (result) {
+        setSignupSuccess(true);
+        setSubmittedEmail(email);
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  const handleResend = async () => {
+    if (submittedEmail) {
+      await resendVerificationEmail(submittedEmail);
+    }
+  };
+
+  if (signupSuccess) {
+    return (
+      <div className='flex flex-col items-center gap-6'>
+        <h2 className='text-xl font-semibold'>Check your inbox</h2>
+        <p className='text-center'>
+          We've sent a confirmation email to{' '}
+          <span className='font-medium'>{submittedEmail}</span>. Please verify
+          your email to continue.
+        </p>
+        <button
+          className='btn btn-primary w-full'
+          onClick={handleResend}
+          type='button'
+        >
+          Resend verification email
+        </button>
+        <div className='mt-2 flex gap-2'>
+          <a
+            href='https://mail.google.com'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='btn btn-secondary'
+          >
+            Open Gmail
+          </a>
+          <a
+            href='https://outlook.live.com'
+            target='_blank'
+            rel='noopener noreferrer'
+            className='btn btn-secondary'
+          >
+            Open Outlook
+          </a>
+        </div>
+        <button
+          className='btn btn-link mt-4'
+          type='button'
+          onClick={() => router.push('/login')}
+        >
+          Back to Login
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div

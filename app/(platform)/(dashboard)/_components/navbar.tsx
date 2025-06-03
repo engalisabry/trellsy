@@ -3,11 +3,12 @@ import { Logo } from '@/components/logo';
 import { OrganizationSwitcher } from '@/components/organizations-switcher';
 import { Button } from '@/components/ui/button';
 import { UserProfile } from '@/components/user-profile';
+import { MobileSidebar } from './mobile-sidebar';
 
 const Navbar = () => {
   return (
     <nav className='fixed top-0 z-50 flex h-14 w-full items-center border-b px-4 shadow-sm'>
-      {/* TODO: Mobile Sidebar */}
+      <MobileSidebar />
       <div className='flex items-center gap-x-4'>
         <div className='mr-3'>
           <Logo />

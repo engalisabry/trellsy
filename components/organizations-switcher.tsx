@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Organization, OrganizationSwitcherProps } from '@/types';
+import type { OrganizationSwitcherProps } from '@/types';
 import { Loader2, Plus } from 'lucide-react';
 import { toast } from 'sonner';
-import { CreateOrganization } from '@/components/create-organization';
+import { CreateOrganizationForm } from '@/components/create-organization-form';
 import {
   Dialog,
   DialogContent,
@@ -27,18 +27,19 @@ export function OrganizationSwitcher({
 }: OrganizationSwitcherProps) {
   const router = useRouter();
 
-  const { fetchOrganizations, organizations } = useOrganizationStore();
+  const {
+    fetchOrganizations,
+    organizations,
+    currentOrganization,
+    setCurrentOrganization,
+  } = useOrganizationStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeOrganization, setActiveOrganization] =
-    useState<Organization | null>(null);
   const [localLoading, setLocalLoading] = useState(true);
 
   const orgs = useMemo(
     () => (Array.isArray(organizations) ? organizations : []),
     [organizations],
   );
-
-  console.log(organizations);
 
   // Fetch organizations on mount
   useEffect(() => {
@@ -58,18 +59,6 @@ export function OrganizationSwitcher({
       });
   }, [fetchOrganizations]);
 
-  // Set the first organization as active by default
-  useEffect(() => {
-    if (orgs.length > 0) {
-      if (
-        !activeOrganization ||
-        !orgs.find((org) => org.id === activeOrganization.id)
-      ) {
-        setActiveOrganization(orgs[0]);
-      }
-    }
-  }, [orgs, activeOrganization]);
-
   const handleOrganizationChange = async (orgId: string) => {
     if (orgId === 'create') {
       setIsModalOpen(true);
@@ -77,20 +66,15 @@ export function OrganizationSwitcher({
     }
 
     if (orgId === 'leave') {
-      // Handle leave organization logic
       toast.info('Leave organization feature coming soon');
       return;
     }
 
-    const selectedOrg = orgs.find((org) => org.id === orgId);
-    if (selectedOrg) {
-      setActiveOrganization(selectedOrg);
-      router.push(`/organization/${selectedOrg.id}`);
-    }
+    setCurrentOrganization(orgId);
+    router.push(`/organization/${orgId}`);
   };
 
   const renderTriggerContent = () => {
-    // Use local loading state instead of the global one
     if (localLoading) {
       return (
         <div className='flex items-center gap-2'>
@@ -104,40 +88,24 @@ export function OrganizationSwitcher({
       return <span>No organizations</span>;
     }
 
-    if (!activeOrganization && orgs.length > 0) {
-      const firstOrg = orgs[0];
-      return (
-        <div className='flex w-full items-center gap-2'>
-          <Avatar className='h-5 w-5'>
-            <AvatarImage
-              src={firstOrg.logo_url as string}
-              alt={firstOrg.name || 'Organization'}
-            />
-            <AvatarFallback className='text-xs'>
-              {firstOrg.name ? firstOrg.name.charAt(0).toUpperCase() : '?'}
-            </AvatarFallback>
-          </Avatar>
-          <span className='truncate'>{firstOrg.name ?? 'Organization'}</span>
-        </div>
-      );
+    const activeOrg = currentOrganization || (orgs.length > 0 ? orgs[0] : null);
+
+    if (!activeOrg) {
+      return null;
     }
 
     return (
       <div className='flex w-full items-center gap-2'>
         <Avatar className='h-5 w-5'>
           <AvatarImage
-            src={activeOrganization?.logo_url as string}
-            alt={activeOrganization?.name || 'Organization'}
+            src={activeOrg.logo_url as string}
+            alt={activeOrg.name || 'Organization'}
           />
           <AvatarFallback className='text-xs'>
-            {activeOrganization?.name
-              ? activeOrganization.name.charAt(0).toUpperCase()
-              : '?'}
+            {activeOrg.name ? activeOrg.name.charAt(0).toUpperCase() : '?'}
           </AvatarFallback>
         </Avatar>
-        <span className='truncate'>
-          {activeOrganization?.name ?? 'Organization'}
-        </span>
+        <span className='truncate'>{activeOrg.name ?? 'Organization'}</span>
       </div>
     );
   };
@@ -146,7 +114,9 @@ export function OrganizationSwitcher({
     <>
       <div style={appearance?.elements?.rootBox}>
         <Select
-          value={activeOrganization?.id || (orgs.length > 0 ? orgs[0].id : '')}
+          value={
+            currentOrganization?.slug || (orgs.length > 0 ? orgs[0].slug : '')
+          }
           onValueChange={handleOrganizationChange}
           disabled={localLoading}
         >
@@ -156,8 +126,8 @@ export function OrganizationSwitcher({
           <SelectContent>
             {orgs.map((organization) => (
               <SelectItem
-                key={organization.id}
-                value={organization.id}
+                key={organization.slug}
+                value={organization.slug}
                 style={appearance?.elements?.item}
               >
                 <div className='flex items-center gap-2'>
@@ -208,7 +178,7 @@ export function OrganizationSwitcher({
               Fill out the details to create a new organization.
             </DialogDescription>
           </DialogHeader>
-          <CreateOrganization />
+          <CreateOrganizationForm />
         </DialogContent>
       </Dialog>
     </>

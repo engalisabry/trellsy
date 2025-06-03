@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import type { Organization } from '@/types';
+import { NavItemProps } from '@/types';
 import { Activity, CreditCard, Layout, Settings } from 'lucide-react';
 import {
   AccordionContent,
@@ -10,14 +11,8 @@ import {
 } from '@/components/ui/accordion';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-
-interface NavItemProps {
-  isActive: boolean;
-  isExpanded: boolean;
-  organization: Organization;
-  onExpand: (id: string) => void;
-}
 
 export const NavItem = ({
   isActive,
@@ -25,7 +20,7 @@ export const NavItem = ({
   onExpand,
   organization,
 }: NavItemProps) => {
-  const { id, name, logo_url } = organization;
+  const { id, name, logo_url, slug } = organization;
   const pathname = usePathname();
   const router = useRouter();
 
@@ -33,22 +28,22 @@ export const NavItem = ({
     {
       label: 'Boards',
       icon: <Layout className='mr-2 h-4 w-4' />,
-      href: `/organization/${id}`,
+      href: `/organization/${slug}`,
     },
     {
       label: 'Activity',
       icon: <Activity className='mr-2 h-4 w-4' />,
-      href: `/organization/${id}/activity`,
+      href: `/organization/${slug}/activity`,
     },
     {
       label: 'Settings',
       icon: <Settings className='mr-2 h-4 w-4' />,
-      href: `/organization/${id}/settings`,
+      href: `/organization/${slug}/settings`,
     },
     {
       label: 'Billing',
       icon: <CreditCard className='mr-2 h-4 w-4' />,
-      href: `/organization/${id}/billing`,
+      href: `/organization/${slug}/billing`,
     },
   ];
 
@@ -58,7 +53,7 @@ export const NavItem = ({
 
   return (
     <AccordionItem
-      value={organization.id}
+      value={organization.slug}
       className='border-none'
     >
       <AccordionTrigger
@@ -66,7 +61,7 @@ export const NavItem = ({
           'hover:bg-netural-500/10 mb-2 flex items-center gap-x-2 rounded-md p-1.5 text-start text-neutral-700 transition hover:no-underline',
           isActive && !isExpanded && 'bg-sky-500/10 text-sky-700',
         )}
-        onClick={() => onExpand(id)}
+        onClick={() => onExpand(slug)}
       >
         <div className='flex items-center gap-x-2'>
           <div className='relative h-7 w-7'>
@@ -102,5 +97,16 @@ export const NavItem = ({
         ))}
       </AccordionContent>
     </AccordionItem>
+  );
+};
+
+NavItem.Skeleton = function SkeletonNavItem() {
+  return (
+    <div className='flex items-center gap-x-2'>
+      <div className='relative h-10 w-10 shrink-0'>
+        <Skeleton className='absolute h-full w-full' />
+      </div>
+      <Skeleton className='h-10 w-full' />
+    </div>
   );
 };

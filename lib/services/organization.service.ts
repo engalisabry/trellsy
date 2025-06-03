@@ -1,168 +1,104 @@
+import { redirect } from 'next/navigation';
 import type {
+  ApiError,
   Organization,
   OrganizationCreateInput,
+  OrganizationInvitation,
   OrganizationMember,
 } from '@/types';
 import { toast } from 'sonner';
-import { getSession } from '../supabase/server';
-import { getSupabaseClient, handleApiError } from './api';
-import { getCurrentUser } from './auth.service';
+import { z } from 'zod';
+import { handleApiError, withSupabase } from './api';
+
+// Validation schemas
+// const organizationSchema = z.object({
+//   name: z.string().min(1, 'Name is required').max(100),
+//   slug: z
+//     .string()
+//     .min(3, 'Slug must be at least 3 characters')
+//     .max(50, 'Slug must be less than 50 characters')
+//     .regex(
+//       /^[a-z0-9-]+$/,
+//       'Slug can only contain lowercase letters, numbers, and hyphens',
+//     ),
+
+//   logo_url: z.string().url().optional(),
+// });
+
+/**
+ * Creates a new organization with validation
+ */
+export const createOrganization = async (
+  props: OrganizationCreateInput & { logo?: File },
+) => {
+  return withSupabase(async (supabase, userId) => {
+    try {
+      // Create organization with auth context
+      const { data: orgData, error: orgError } = await supabase
+        .from('Organization')
+        .insert({
+          name: props.name,
+          slug: props.slug,
+          created_by: userId,
+          logo_url: props.logo_url,
+        })
+        .select()
+        .single();
+
+      if (orgError) toast.error('Failed to create organization');
+
+      // Add user as owner with auth context
+      const { error: memberError } = await supabase
+        .from('OrganizationMembers')
+        .insert({
+          organization_id: orgData.id,
+          profile_id: userId,
+          role: 'owner',
+        });
+
+      if (memberError) toast.error('Failed to add user as owner');
+
+      return orgData;
+    } catch (error) {
+      toast.error('Something went wrong');
+      throw error;
+    }
+  });
+};
 
 /**
  * Fetches all organizations for the current user
- */
-export const fetchUserOrganizations = async () => {
-  const supabase = getSupabaseClient();
-
-  try {
-    const user = await getCurrentUser();
-
-    if (!user) {
-      toast.error('No authenticated user found');
-      throw new Error('No authenticated user found');
-    }
-
-    const { data, error } = await supabase
-      .from('organization_members')
-      .select(
-        `
-        id, organization_id, user_id, role, created_at,
-        organization:organizations (
-          id, name, slug, logo_url, metadata, created_at, updated_at
-        )
-      `,
-      )
-      .eq('user_id', user.id);
-
-    if (error) {
-      toast.error(error.message || 'Failed to fetch organizations');
-      throw error;
-    }
-
-    // Process and flatten the data
-    const organizations: Organization[] = [];
-    const memberships: OrganizationMember[] = [];
-
-    if (data && Array.isArray(data)) {
-      data.forEach((m) => {
-        let orgObj = null;
-        if (Array.isArray(m.organization)) {
-          if (m.organization.length > 0) {
-            orgObj = m.organization[0];
-          }
-        } else if (m.organization && typeof m.organization === 'object') {
-          orgObj = m.organization;
-        }
-
-        if (orgObj) {
-          organizations.push({ ...orgObj });
-        }
-
-        memberships.push({
-          id: m.id,
-          organization_id: m.organization_id,
-          user_id: m.user_id,
-          role: m.role,
-          created_at: m.created_at,
-        });
-      });
-    }
-
-    // If no organizations were found, create a dummy one for testing
-    if (organizations.length === 0) {
-      const dummyOrg = {
-        id: 'dummy-org-id',
-        name: 'Test Organization',
-        slug: 'test-org',
-        logo_url: null,
-        metadata: {},
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
-
-      organizations.push(dummyOrg);
-
-      // Also create a dummy membership
-      memberships.push({
-        id: 'dummy-membership-id',
-        organization_id: dummyOrg.id,
-        user_id: user.id,
-        role: 'admin',
-        created_at: new Date().toISOString(),
-      });
-    }
-
-    return { organizations, memberships };
-  } catch (error) {
-    throw handleApiError(error, 'Failed to fetch organizations');
-  }
-};
-
-/**
- * Upload Logo
+ * @returns {Promise<{ organizations: Organization[]; memberships: OrganizationMember[] }>}
  */
 
-export const uploadOrganizationLogo = async (file: File, slug: string) => {
-  const supabase = getSupabaseClient();
-  const fileExt = file.name.split('.').pop();
-  const fileName = `${slug}-${Date.now()}.${fileExt}`;
-  const { error } = await supabase.storage
-    .from('organization-logos')
-    .upload(fileName, file);
+export const fetchUserOrganizations = async (): Promise<{
+  organizations: Organization[];
+  memberships: OrganizationMember[];
+}> => {
+  return withSupabase(async (supabase, userId) => {
+    if (!userId) throw new Error('User ID is required');
 
-  if (error) {
-    toast.error('Failed to get the organization logo');
-  }
+    try {
+      const [orgsResult, membershipsResult] = await Promise.all([
+        supabase.from('Organization').select('*').eq('created_by', userId),
+        supabase
+          .from('OrganizationMembers')
+          .select('*, organization:Organization(*)')
+          .eq('profile_id', userId),
+      ]);
 
-  const { data: publicUrlData } = supabase.storage
-    .from('organization-logos')
-    .getPublicUrl(fileName);
+      if (orgsResult.error) throw orgsResult.error;
+      if (membershipsResult.error) throw membershipsResult.error;
 
-  return publicUrlData.publicUrl;
-};
+      const organizations = orgsResult.data || [];
+      const memberships = membershipsResult.data || [];
 
-/**
- * Creates a new organization
- */
-export const createOrganization = async (props: OrganizationCreateInput) => {
-  const supabase = getSupabaseClient();
-  const session = await getSession();
-
-  try {
-    // Insert organization
-    const { data, error } = await supabase
-      .from('organizations')
-      .insert({
-        name: props.name,
-        slug: props.slug,
-        logo_url: props.logo_url,
-        // metadata is optional, add if needed
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-
-    // Insert membership for the creator as admin
-    const { error: memberError } = await supabase
-      .from('organization_members')
-      .insert({
-        organization_id: data.id,
-        user_id: session?.user.id,
-        role: 'admin',
-      });
-
-    if (memberError) {
-      toast.error('Failed to add user to organization');
-      console.error(memberError);
-      throw memberError;
+      return { organizations, memberships };
+    } catch (error) {
+      handleApiError(error);
+      return { organizations: [], memberships: [] };
     }
-
-    return data;
-  } catch (error) {
-    console.error(error);
-    throw handleApiError(error, 'Failed to create organization');
-  }
+  });
 };
 
 /**
@@ -170,48 +106,231 @@ export const createOrganization = async (props: OrganizationCreateInput) => {
  */
 export const updateOrganization = async (
   id: string,
-  data: Partial<Organization>,
+  updates: Partial<Organization>,
 ) => {
-  const supabase = getSupabaseClient();
+  return withSupabase(async (supabase, userId) => {
+    try {
+      const { data, error } = await supabase
+        .from('Organization')
+        .update(updates)
+        .eq('id', id)
+        .eq('created_by', userId)
+        .select()
+        .single();
 
-  try {
-    const { error } = await supabase
-      .from('organizations')
-      .update(data)
-      .eq('id', id);
+      if (error) {
+        handleApiError(error, 'Failed to update organization');
+        return false;
+      }
 
-    if (error) {
-      toast.error(error.message || 'Failed to update organization');
-      throw error;
+      return data;
+    } catch (error) {
+      handleApiError(error);
+      return false;
     }
-
-    toast.success('Organization updated successfully');
-    return true;
-  } catch (error) {
-    throw handleApiError(error, 'Failed to update organization');
-  }
+  });
 };
 
 /**
  * Deletes an organization
  */
 export const deleteOrganization = async (id: string) => {
-  const supabase = getSupabaseClient();
+  return withSupabase(async (supabase, userId) => {
+    try {
+      const { error } = await supabase
+        .from('Organization')
+        .delete()
+        .eq('id', id)
+        .eq('created_by', userId);
 
-  try {
-    const { error } = await supabase
-      .from('organizations')
-      .delete()
-      .eq('id', id);
+      if (error) {
+        handleApiError(error, 'Failed to delete organization');
+        return false;
+      }
 
-    if (error) {
-      toast.error(error.message || 'Failed to delete organization');
-      throw error;
+      return true;
+    } catch (error) {
+      handleApiError(error);
+      return false;
     }
+  });
+};
 
-    toast.success('Organization deleted successfully');
-    return true;
-  } catch (error) {
-    throw handleApiError(error, 'Failed to delete organization');
-  }
+/**
+ * Organization Invitations
+ */
+
+// Invite a user to an organization
+export const inviteToOrganization = async (
+  organization_id: string,
+  email: string,
+  role: string = 'member',
+) => {
+  return withSupabase(async (supabase, userId) => {
+    try {
+      // Generate a unique token for the invitation
+      const token = crypto.randomUUID();
+
+      const { data, error } = await supabase
+        .from('OrganizationInvitations')
+        .insert({
+          organization_id,
+          email,
+          role,
+          invited_by: userId,
+          status: 'pending',
+          token,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        handleApiError(error, 'Failed to delete organization');
+        return false;
+      }
+
+      return data as OrganizationInvitation;
+    } catch (error) {
+      handleApiError(error);
+      return false;
+    }
+  });
+};
+
+// List all invitations for an organization
+export const listOrganizationInvitations = async (organization_id: string) => {
+  return withSupabase(async (supabase) => {
+    try {
+      const { data, error } = await supabase
+        .from('OrganizationInvitations')
+        .select('*')
+        .eq('organization_id', organization_id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        handleApiError(error, "Can't get invitations list");
+        return error;
+      }
+
+      return (Array.isArray(data) ? data : []) as OrganizationInvitation[];
+    } catch (error) {
+      handleApiError(error);
+      return false;
+    }
+  });
+};
+
+// Resend invitation (regenerate token, set status to pending, clear accepted/revoked)
+export const resendOrganizationInvitation = async (invitation_id: string) => {
+  return withSupabase(async (supabase) => {
+    try {
+      const token = crypto.randomUUID();
+      const { data, error } = await supabase
+        .from('OrganizationInvitations')
+        .update({
+          token,
+          status: 'pending',
+          accepted_at: null,
+          revoked_at: null,
+        })
+        .eq('id', invitation_id)
+        .select()
+        .single();
+
+      if (error) {
+        handleApiError(error, 'Failed to resend invitaion');
+        return false;
+      }
+
+      return data as OrganizationInvitation;
+    } catch (error) {
+      handleApiError(error);
+      return false;
+    }
+  });
+};
+
+// Revoke invitation
+export const revokeOrganizationInvitation = async (invitation_id: string) => {
+  return withSupabase(async (supabase) => {
+    try {
+      const { data, error } = await supabase
+        .from('OrganizationInvitations')
+        .update({
+          status: 'revoked',
+          revoked_at: new Date().toISOString(),
+        })
+        .eq('id', invitation_id)
+        .select()
+        .single();
+
+      if (error) {
+        handleApiError(error, 'Failed revoke invitaion');
+        return false;
+      }
+
+      return data as OrganizationInvitation;
+    } catch (error) {
+      handleApiError(error);
+      return false;
+    }
+  });
+};
+
+// Accept invitation by token
+export const acceptOrganizationInvitation = async (
+  token: string,
+  profile_id: string,
+) => {
+  return withSupabase(async (supabase) => {
+    try {
+      const { data: invite, error: inviteError } = await supabase
+        .from('OrganizationInvitations')
+        .select('*')
+        .eq('token', token)
+        .eq('status', 'pending')
+        .single();
+
+      if (inviteError || !invite) {
+        handleApiError(inviteError, "Can't get invitations");
+        return false;
+      }
+
+      // Add the user as a member
+      const { error: memberError } = await supabase
+        .from('OrganizationMembers')
+        .insert({
+          organization_id: invite.organization_id,
+          profile_id,
+          role: invite.role,
+        });
+
+      if (memberError) {
+        handleApiError(
+          memberError,
+          'Failed to add initer as organnization member',
+        );
+        return false;
+      }
+
+      // Mark invitation as accepted
+      const { error: updateError } = await supabase
+        .from('OrganizationInvitations')
+        .update({
+          status: 'accepted',
+          accepted_at: new Date().toISOString(),
+        })
+        .eq('id', invite.id);
+
+      if (updateError) {
+        handleApiError(updateError, 'Failed to update status of invitation');
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      handleApiError(error);
+      return false;
+    }
+  });
 };

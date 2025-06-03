@@ -3,7 +3,7 @@ import { CSSProperties } from 'react';
 export interface OrganizationCreateInput {
   name: string;
   slug: string;
-  logo_url?: string | File | null;
+  logo_url?: string;
 }
 
 export interface Organization extends OrganizationCreateInput {
@@ -19,6 +19,47 @@ export interface OrganizationMember {
   user_id: string;
   role: string;
   created_at?: string;
+  avatar_url?: string;
+}
+
+export interface ApiError {
+  code: string;
+  message: string;
+  details?: string;
+}
+
+export interface OrganizationState {
+  organizations: Organization[];
+  memberships: OrganizationMember[];
+  isLoading: boolean;
+  isSuccess: boolean;
+  error: Error | null;
+  fetchOrganizations: () => Promise<{
+    organizations: Organization[];
+    memberships: OrganizationMember[];
+  }>;
+  createOrganization: (
+    props: OrganizationCreateInput,
+  ) => Promise<Organization | false>;
+  updateOrganization: (
+    id: string,
+    data: Partial<OrganizationCreateInput>,
+  ) => Promise<void>;
+  deleteOrganization: (id: string) => Promise<void>;
+  setOrganizations: (organizations: Organization[]) => void;
+  clearErrors: () => void;
+  clearState: () => void;
+}
+
+export type OrganizationRole = 'owner' | 'admin' | 'member';
+
+export interface OrganizationWithMembers extends Organization {
+  members: OrganizationMember[];
+}
+
+export interface ApiResponse<T> {
+  data: T | null;
+  error: ApiError | null;
 }
 
 // --- User Profile ---
@@ -32,27 +73,6 @@ export interface UserProfile {
 }
 
 // --- Store State Types ---
-export interface OrganizationState {
-  organizations: Organization[];
-  memberships: OrganizationMember[];
-  isLoading: boolean;
-  isSuccess: boolean;
-  error: Error | null;
-  fetchOrganizations: () => Promise<{
-    organizations: Organization[];
-    memberships: OrganizationMember[];
-  }>;
-  createOrganization: (props: OrganizationCreateInput) => Promise<void>;
-  updateOrganization: (
-    id: string,
-    data: Partial<OrganizationCreateInput>,
-  ) => Promise<void>;
-  deleteOrganization: (id: string) => Promise<void>;
-  setOrganizations: (organizations: Organization[]) => void;
-  clearErrors: () => void;
-  clearState: () => void;
-}
-
 export interface ProfileState {
   userProfile: UserProfile | null;
   isLoading: boolean;
@@ -79,7 +99,9 @@ export interface AppStoreState {
     organizations: Organization[];
     memberships: OrganizationMember[];
   }>;
-  createOrganization: (props: OrganizationCreateInput) => Promise<void>;
+  createOrganization: (
+    props: OrganizationCreateInput,
+  ) => Promise<Organization | false>;
   updateOrganization: (
     id: string,
     data: Partial<OrganizationCreateInput>,
@@ -106,4 +128,32 @@ export interface OrganizationSwitcherProps {
 
 export interface SidebarProps {
   StorageKey?: string;
+}
+
+export interface NavItemProps {
+  isActive: boolean;
+  isExpanded: boolean;
+  organization: Organization;
+  onExpand: (id: string) => void;
+}
+
+export interface MobileSidebarProps {
+  isOpen: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}
+
+export interface OrganizationInvitation {
+  id: string;
+  organization_id: string;
+  email: string;
+  role: string;
+  token: string;
+  status: 'pending' | 'accepted' | 'revoked';
+  invited_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+  metadata?: Record<string, unknown>;
 }

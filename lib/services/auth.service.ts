@@ -1,5 +1,55 @@
 import { toast } from 'sonner';
-import { getSupabaseClient, handleApiError } from './api';
+import { getSupabaseClient, handleApiError, withSupabase } from './api';
+
+/**
+ * Handles email/password Signup
+ */
+export const signupWithEmailPassword = async (
+  email: string,
+  password: string,
+) => {
+  const supabase = await getSupabaseClient();
+  try {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+
+    if (error) {
+      handleApiError(error, 'Signup failed');
+      return false;
+    }
+
+    toast.success(`Success! Please check your inbox and confirm your email.`);
+    return true;
+  } catch (error) {
+    handleApiError(error, 'Signup failed');
+    return false;
+  }
+};
+
+/**
+ * Resend verification email
+ */
+export const resendVerificationEmail = async (email: string) => {
+  const supabase = await getSupabaseClient();
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email,
+    });
+
+    if (error) {
+      handleApiError(error, 'Failed to resend verification email');
+      return false;
+    }
+    toast.success('Verification email resent!');
+    return true;
+  } catch (error) {
+    handleApiError(error, 'Failed to resend verification email');
+    return false;
+  }
+};
 
 /**
  * Handles email/password login
@@ -8,8 +58,7 @@ export const loginWithEmailPassword = async (
   email: string,
   password: string,
 ) => {
-  const supabase = getSupabaseClient();
-
+  const supabase = await getSupabaseClient();
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
@@ -17,18 +66,16 @@ export const loginWithEmailPassword = async (
     });
 
     if (error) {
-      toast.error(error.message);
-      throw error;
+      handleApiError(error, 'Login failed');
+      return false;
     }
 
-    toast.success(`Welcome back to Trellsy`);
-
-    // Redirect to organization page after successful login
     window.location.href = '/organization';
+    toast.success(`Welcome back to Trellsy`);
 
     return data;
   } catch (error) {
-    throw handleApiError(error, 'Login failed');
+    handleApiError(error, 'Login failed');
   }
 };
 
@@ -36,8 +83,7 @@ export const loginWithEmailPassword = async (
  * Handles Google OAuth login
  */
 export const loginWithGoogleOAuth = async () => {
-  const supabase = getSupabaseClient();
-
+  const supabase = await getSupabaseClient();
   try {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -51,14 +97,13 @@ export const loginWithGoogleOAuth = async () => {
     });
 
     if (error) {
-      toast.error(error.message);
-      throw error;
+      handleApiError(error, 'Google login failed');
     }
 
     // OAuth flow will handle redirect
     return true;
   } catch (error) {
-    throw handleApiError(error, 'Google login failed');
+    handleApiError(error, 'Google login failed');
   }
 };
 
@@ -66,24 +111,21 @@ export const loginWithGoogleOAuth = async () => {
  * Handles user logout
  */
 export const logout = async () => {
-  const supabase = getSupabaseClient();
-
+  const supabase = await getSupabaseClient();
   try {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      toast.error(error.message);
-      throw error;
+      handleApiError(error, 'Failed to logout');
     }
 
     toast.success('Logged out successfully');
 
-    // Redirect to login page after logout
     window.location.href = '/auth/login';
 
     return true;
   } catch (error) {
-    throw handleApiError(error, 'Logout failed');
+    handleApiError(error, 'Logout failed');
   }
 };
 
@@ -91,8 +133,7 @@ export const logout = async () => {
  * Gets the current authenticated user
  */
 export const getCurrentUser = async () => {
-  const supabase = getSupabaseClient();
-
+  const supabase = await getSupabaseClient();
   try {
     const {
       data: { user },
@@ -100,12 +141,13 @@ export const getCurrentUser = async () => {
     } = await supabase.auth.getUser();
 
     if (error) {
-      throw error;
+      handleApiError(error, 'Failed to get the user details');
+      return;
     }
 
     return user;
   } catch (error) {
-    console.error('Error getting current user:', error);
-    return null;
+    handleApiError(error, 'Failed to get the user details');
+    return;
   }
 };
