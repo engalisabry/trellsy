@@ -36,12 +36,21 @@ export async function updateSession(request: NextRequest) {
       },
     );
 
-    // Get the user - critical for authentication
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    
-    if (userError) {
-      console.error('Error getting user in middleware:', userError.message);
+    // Get the session - critical for authentication
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError) {
+      console.error(
+        'Error getting session in middleware:',
+        sessionError.message,
+      );
+      return supabaseResponse;
     }
+
+    const user = session?.user;
 
     // Define public routes that don't require authentication
     const isPublicRoute =
@@ -53,9 +62,23 @@ export async function updateSession(request: NextRequest) {
 
     // If no user and trying to access protected route, redirect to login
     if (!user && !isPublicRoute) {
-      console.log(`Redirecting unauthenticated user from ${request.nextUrl.pathname} to /auth/login`);
+      console.log(
+        `Redirecting unauthenticated user from ${request.nextUrl.pathname} to /auth/login`,
+      );
       const url = request.nextUrl.clone();
       url.pathname = '/auth/login';
+      return NextResponse.redirect(url);
+    }
+
+    // If user is authenticated and trying to access a public auth route, redirect to /organization
+    if (
+      user &&
+      (request.nextUrl.pathname.startsWith('/auth') ||
+        request.nextUrl.pathname.startsWith('/login') ||
+        request.nextUrl.pathname.startsWith('/sign-up'))
+    ) {
+      const url = request.nextUrl.clone();
+      url.pathname = '/organization';
       return NextResponse.redirect(url);
     }
 
@@ -69,19 +92,24 @@ export async function updateSession(request: NextRequest) {
       try {
         // Check if user has organizations
         const { data: organizations, error: orgError } = await supabase
-          .from('organization_members')
+          .from('OrganizationMembers')
           .select('organization_id')
-          .eq('user_id', user.id);
+          .eq('profile_id', session?.user?.id);
 
         if (orgError) {
-          console.error('Error checking organizations in middleware:', orgError.message);
+          console.error(
+            'Error checking organizations in middleware:',
+            orgError.message,
+          );
           // Continue with the request despite the error
           return supabaseResponse;
         }
 
         // If no organizations, redirect to create organization page
         if (!organizations?.length) {
-          console.log(`Redirecting user ${user.id} to /create-organization (no organizations found)`);
+          console.log(
+            `Redirecting user ${user.id} to /create-organization (no organizations found)`,
+          );
           const url = request.nextUrl.clone();
           url.pathname = '/create-organization';
           return NextResponse.redirect(url);
@@ -92,7 +120,9 @@ export async function updateSession(request: NextRequest) {
           request.nextUrl.pathname === '/' ||
           request.nextUrl.pathname === '/protected'
         ) {
-          console.log(`Redirecting user ${user.id} from ${request.nextUrl.pathname} to /organization`);
+          console.log(
+            `Redirecting user ${user.id} from ${request.nextUrl.pathname} to /organization`,
+          );
           const url = request.nextUrl.clone();
           url.pathname = '/organization';
           return NextResponse.redirect(url);

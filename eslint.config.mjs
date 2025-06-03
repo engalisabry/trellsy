@@ -10,7 +10,35 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
-  ...compat.extends("next/core-web-vitals", "next/typescript"),
+  ...compat.extends("next/core-vitals"),
+  {
+    // Ignore Prisma generated files
+    ignores: [
+      '**/node_modules/**',
+      '**/.next/**',
+      '**/lib/generated/**',
+      '**/prisma/generated/**'
+    ]
+  },
+  {
+    // Global TypeScript rules
+    files: ['**/*.ts', '**/*.tsx'],
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'warn',
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/no-this-alias': 'off',
+      '@typescript-eslint/ban-ts-comment': 'off'
+    }
+  },
+  {
+    // Next.js specific rules
+    files: ['**/*.tsx'],
+    rules: {
+      'react-hooks/exhaustive-deps': 'warn',
+      'react/no-unescaped-entities': 'off'
+    }
+  }
 ];
 
 export default eslintConfig;

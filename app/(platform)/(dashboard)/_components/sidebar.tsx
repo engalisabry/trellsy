@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { Organization, SidebarProps } from '@/types';
 import { Plus } from 'lucide-react';
 import { useLocalStorage } from 'usehooks-ts';
-import { CreateOrganization } from '@/components/create-organization';
+import { CreateOrganizationForm } from '@/components/create-organization-form';
 import { Accordion } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
 import {
@@ -70,7 +70,19 @@ export const Sidebar = ({ StorageKey = 't-sidebar-state' }: SidebarProps) => {
   };
 
   if (isLoading) {
-    return <Skeleton className='w-full' />;
+    return (
+      <>
+        <div className='mb-2 flex items-center justify-between'>
+          <Skeleton className='h-10 w-[50%]' />
+          <Skeleton className='h-10 w-10' />
+        </div>
+        <div className='space-y-2'>
+          <NavItem.Skeleton />
+          <NavItem.Skeleton />
+          <NavItem.Skeleton />
+        </div>
+      </>
+    );
   }
 
   return (
@@ -97,7 +109,7 @@ export const Sidebar = ({ StorageKey = 't-sidebar-state' }: SidebarProps) => {
                 Fill out the details to create a new organization.
               </DialogDescription>
             </DialogHeader>
-            <CreateOrganization />
+            <CreateOrganizationForm />
           </DialogContent>
         </Dialog>
       </div>
