@@ -1,13 +1,15 @@
-# Trellsy ![Project Screenshot](public/logo.svg)
+# Ali-Trello ![Project Screenshot](public/logo.svg)
 
 > A modern, collaborative project management tool inspired by Trello. Built with
-> Next.js, TypeScript, Tailwind CSS, and Supabase.
+> Next.js, TypeScript, Tailwind CSS, Shadcn/UI, and Supabase.
 
 ---
 
 [![Next.js](https://img.shields.io/badge/Next.js-15-blue?logo=next.js)](https://nextjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-blue?logo=typescript)](https://www.typescriptlang.org/)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-4-blue?logo=tailwindcss)](https://tailwindcss.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-latest-green?logo=supabase)](https://supabase.com/)
+[![Shadcn/UI](https://img.shields.io/badge/Shadcn/UI-latest-black)](https://ui.shadcn.com/)
 
 ---
 
@@ -27,10 +29,10 @@
 
 ## Project Overview
 
-Trellsy is a powerful, extensible, and user-friendly project management tool
+Ali-Trello is a powerful, extensible, and user-friendly project management tool
 designed to help teams organize tasks, collaborate, and achieve their goals
-efficiently. Inspired by Trello, Trellsy offers boards, lists, cards, user
-authentication, and real-time collaboration features.
+efficiently. Inspired by Trello, this application offers boards, lists, cards, user
+authentication, organization management, and real-time collaboration features. It uses Supabase for backend functionality, including authentication and Row Level Security (RLS) for data protection.
 
 ## Features
 

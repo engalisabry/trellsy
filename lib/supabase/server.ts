@@ -25,23 +25,13 @@ const createServerSupabaseClient = async () => {
         get(name: string) {
           return cookieStore.get(name)?.value;
         },
-        set(name: string, value: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value, ...options });
-          } catch (error) {
-            throw Error(
-              error instanceof Error ? error.message : 'Something went wrong',
-            );
-          }
+        set() {
+          // No-op - cookies handled by middleware
+          return;
         },
-        remove(name: string, options: CookieOptions) {
-          try {
-            cookieStore.set({ name, value: '', ...options });
-          } catch (error) {
-            throw Error(
-              error instanceof Error ? error.message : 'Something went wrong',
-            );
-          }
+        remove() {
+          // No-op - cookies handled by middleware
+          return;
         },
       },
     },

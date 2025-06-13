@@ -25,7 +25,7 @@ const Page = () => {
       >
         <div className='mb-4 flex items-center rounded-full border p-4 text-amber-700 uppercase shadow-sm'>
           <Medal className='mr-2 h-6 w-6' />
-          No 1 task managment
+          No 1 task management
         </div>
         <h1 className='mb-10 text-center text-3xl text-[var(--primary)] md:text-6xl'>
           Trellsy helps team move
@@ -56,9 +56,9 @@ const Page = () => {
           poppinsFontText.className,
         )}
       >
-        collaborate, manage projets, and reach new productivity. From high rises
-        to the home office, the way your team works is unique - accomplish it
-        all with Trellsy.
+        collaborate, manage projects, and reach new productivity. From high
+        rises to the home office, the way your team works is unique - accomplish
+        it all with Trellsy.
       </div>
 
       <Button
