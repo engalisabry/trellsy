@@ -4,6 +4,7 @@ export interface OrganizationCreateInput {
   name: string;
   slug: string;
   logo_url?: string;
+  logo?: File;
 }
 
 export interface Organization extends OrganizationCreateInput {

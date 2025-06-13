@@ -1,29 +1,28 @@
 import { redirect } from 'next/navigation';
 import type {
-  ApiError,
   Organization,
   OrganizationCreateInput,
   OrganizationInvitation,
   OrganizationMember,
 } from '@/types';
-import { toast } from 'sonner';
 import { z } from 'zod';
 import { handleApiError, withSupabase } from './api';
+import { uploadFile } from './file-upload.service';
 
 // Validation schemas
-// const organizationSchema = z.object({
-//   name: z.string().min(1, 'Name is required').max(100),
-//   slug: z
-//     .string()
-//     .min(3, 'Slug must be at least 3 characters')
-//     .max(50, 'Slug must be less than 50 characters')
-//     .regex(
-//       /^[a-z0-9-]+$/,
-//       'Slug can only contain lowercase letters, numbers, and hyphens',
-//     ),
+const organizationSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(100),
+  slug: z
+    .string()
+    .min(3, 'Slug must be at least 3 characters')
+    .max(50, 'Slug must be less than 50 characters')
+    .regex(
+      /^[a-z0-9-]+$/,
+      'Slug can only contain lowercase letters, numbers, and hyphens',
+    ),
 
-//   logo_url: z.string().url().optional(),
-// });
+  logo_url: z.string().url().optional(),
+});
 
 /**
  * Creates a new organization with validation
@@ -33,35 +32,118 @@ export const createOrganization = async (
 ) => {
   return withSupabase(async (supabase, userId) => {
     try {
-      // Create organization with auth context
-      const { data: orgData, error: orgError } = await supabase
+      if (!userId) {
+        console.error('No user ID available for organization creation');
+        throw new Error('User ID is required for organization creation');
+      }
+
+      console.log('Auth context for organization creation:', {
+        userId,
+        session: await supabase.auth.getSession(),
+        user: await supabase.auth.getUser(),
+      });
+
+      // Handle logo upload
+      let logo_url = props.logo_url;
+      if (props.logo && props.logo instanceof File) {
+        try {
+          console.log('Uploading logo file:', props.logo.name);
+          logo_url = await uploadFile(props.logo, 'organization-logos');
+          console.log('Logo uploaded successfully, URL:', logo_url);
+        } catch (error) {
+          console.error('Logo upload failed:', error);
+          // Continue without logo if upload fails
+        }
+      }
+
+      const insertData = {
+        name: props.name,
+        slug: props.slug,
+        created_by: userId.toString(),
+        logo_url,
+      };
+
+      console.log('Organization creation auth context:', {
+        userId,
+        userIdType: typeof userId,
+        session: await supabase.auth.getSession(),
+        user: await supabase.auth.getUser(),
+      });
+
+      console.log('Organization insert data:', insertData);
+
+      const insertQuery = supabase
         .from('Organization')
-        .insert({
-          name: props.name,
-          slug: props.slug,
-          created_by: userId,
-          logo_url: props.logo_url,
-        })
+        .insert(insertData)
         .select()
         .single();
 
-      if (orgError) toast.error('Failed to create organization');
+      console.log('Organization insert query:', {
+        sql: insertQuery.toString(),
+        params: {
+          name: props.name,
+          slug: props.slug,
+          userId,
+          logo_url: props.logo_url,
+        },
+      });
 
-      // Add user as owner with auth context
-      const { error: memberError } = await supabase
-        .from('OrganizationMembers')
-        .insert({
-          organization_id: orgData.id,
-          profile_id: userId,
-          role: 'owner',
-        });
+      const { data: orgData, error: orgError } = await insertQuery;
 
-      if (memberError) toast.error('Failed to add user as owner');
+      console.log('Organization creation attempt with:', {
+        name: props.name,
+        slug: props.slug,
+        userId: userId,
+      });
 
-      return orgData;
+      if (orgError) {
+        console.error('Organization creation failed:', orgError);
+        throw new Error(`Failed to create organization: ${orgError.message}`);
+      }
+
+      if (!orgData) {
+        throw new Error('Organization creation returned no data');
+      }
+
+      // The rest of your function...
     } catch (error) {
-      toast.error('Something went wrong');
-      throw error;
+      handleError(error, {
+        defaultMessage: 'Failed to create organization',
+        context: { action: 'createOrganization', props },
+        showToast: true,
+        throwError: true,
+      });
+    }
+  });
+};
+
+export const checkSlugAvailability = async (slug: string): Promise<boolean> => {
+  return withSupabase(async (supabase) => {
+    try {
+      const { data, error } = await supabase
+        .from('Organization')
+        .select('id')
+        .eq('slug', slug)
+        .single();
+
+      if (error && error.code !== 'PGRST116') {
+        handleError(error, {
+          defaultMessage: 'Error checking slug availability',
+          showToast: true,
+          context: { action: 'checkSlugAvailability', slug },
+        });
+        return false;
+      }
+
+      return !data;
+    } catch (error) {
+      handleError(error, {
+        defaultMessage: 'Unexpected error checking slug availability',
+        context: { action: 'checkSlugAvailability', slug },
+        showToast: true,
+        throwError: true,
+      });
+      return false;
     }
   });
 };
@@ -238,7 +320,7 @@ export const resendOrganizationInvitation = async (invitation_id: string) => {
         .single();
 
       if (error) {
-        handleApiError(error, 'Failed to resend invitaion');
+        handleApiError(error, 'Failed to resend invitation');
         return false;
       }
 
@@ -265,7 +347,7 @@ export const revokeOrganizationInvitation = async (invitation_id: string) => {
         .single();
 
       if (error) {
-        handleApiError(error, 'Failed revoke invitaion');
+        handleApiError(error, 'Failed revoke invitation');
         return false;
       }
 
@@ -308,7 +390,7 @@ export const acceptOrganizationInvitation = async (
       if (memberError) {
         handleApiError(
           memberError,
-          'Failed to add initer as organnization member',
+          'Failed to add user as organization member',
         );
         return false;
       }
