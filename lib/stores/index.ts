@@ -25,6 +25,7 @@ export const useStore = create(() => ({
 }));
 
 // Re-export individual stores for direct access if needed
-export { useAuthStore } from './auth.store';
+export { useAuthStore, useAuthStoreCompat } from './auth.store';
+export { useAuth, useUser, useSession, clearAuthCache } from '../hooks/use-auth';
 export { useOrganizationStore } from './organization.store';
 export { useProfileStore } from './profile.store';

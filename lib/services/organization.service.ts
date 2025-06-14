@@ -6,7 +6,8 @@ import type {
   OrganizationMember,
 } from '@/types';
 import { z } from 'zod';
-import { handleApiError, withSupabase } from './api';
+import { handleApiError, withSupabase, withSupabaseClient } from './api';
+import { handleError } from '../error-handling';
 import { uploadFile } from './file-upload.service';
 
 // Validation schemas
@@ -149,11 +150,10 @@ export const checkSlugAvailability = async (slug: string): Promise<boolean> => {
 };
 
 /**
- * Fetches all organizations for the current user
+ * Fetches all organizations for the current user (Server-side)
  * @returns {Promise<{ organizations: Organization[]; memberships: OrganizationMember[] }>}
  */
-
-export const fetchUserOrganizations = async (): Promise<{
+export const fetchUserOrganizationsServer = async (): Promise<{
   organizations: Organization[];
   memberships: OrganizationMember[];
 }> => {
@@ -178,6 +178,47 @@ export const fetchUserOrganizations = async (): Promise<{
       return { organizations, memberships };
     } catch (error) {
       handleApiError(error);
+      return { organizations: [], memberships: [] };
+    }
+  });
+};
+
+/**
+ * Fetches all organizations for the current user (Client-side)
+ * @returns {Promise<{ organizations: Organization[]; memberships: OrganizationMember[] }>}
+ */
+export const fetchUserOrganizations = async (): Promise<{
+  organizations: Organization[];
+  memberships: OrganizationMember[];
+}> => {
+  return withSupabaseClient(async (supabase) => {
+    try {
+      // Get current user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error('User not authenticated');
+      }
+
+      const userId = user.id;
+
+      const [orgsResult, membershipsResult] = await Promise.all([
+        supabase.from('Organization').select('*').eq('created_by', userId),
+        supabase
+          .from('OrganizationMembers')
+          .select('*, organization:Organization(*)')
+          .eq('profile_id', userId),
+      ]);
+
+      if (orgsResult.error) throw orgsResult.error;
+      if (membershipsResult.error) throw membershipsResult.error;
+
+      const organizations = orgsResult.data || [];
+      const memberships = membershipsResult.data || [];
+
+      return { organizations, memberships };
+    } catch (error) {
+      handleApiError(error, 'Failed to fetch organizations', { throwError: true });
       return { organizations: [], memberships: [] };
     }
   });

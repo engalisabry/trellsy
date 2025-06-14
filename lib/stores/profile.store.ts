@@ -1,7 +1,6 @@
 import { ProfileState } from '@/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { encryptData } from '@/lib/encryption';
 import {
   fetchUserProfile,
   updateUserProfile,
@@ -63,7 +62,7 @@ export const useProfileStore = create<ProfileState>()(
       name: 'profile-store',
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
-        userProfile: encryptData(state.userProfile),
+        userProfile: state.userProfile,
       }),
     },
   ),
