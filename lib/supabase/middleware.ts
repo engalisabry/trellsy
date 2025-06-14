@@ -2,17 +2,13 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
 
 /**
- * Middleware to handle authentication and redirects
- * This version properly handles errors without throwing them
+ * Simplified middleware for authentication and redirects
+ * Focuses on core functionality with reduced complexity
  */
 export async function updateSession(request: NextRequest) {
-  // Create a response that we'll modify later
-  let supabaseResponse = NextResponse.next({
-    request,
-  });
+  let response = NextResponse.next({ request });
 
   try {
-    // Initialize Supabase client
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -25,121 +21,93 @@ export async function updateSession(request: NextRequest) {
             cookiesToSet.forEach(({ name, value }) =>
               request.cookies.set(name, value),
             );
-            supabaseResponse = NextResponse.next({
-              request,
-            });
+            response = NextResponse.next({ request });
             cookiesToSet.forEach(({ name, value, options }) =>
-              supabaseResponse.cookies.set(name, value, options),
+              response.cookies.set(name, value, options),
             );
           },
         },
       },
     );
 
-    // Get the session - critical for authentication
-    const {
-      data: { session },
-      error: sessionError,
-    } = await supabase.auth.getSession();
-
-    if (sessionError) {
-      console.error(
-        'Error getting session in middleware:',
-        sessionError.message,
-      );
-      return supabaseResponse;
-    }
-
+    // Get current session without forcing refresh
+    const { data: { session } } = await supabase.auth.getSession();
     const user = session?.user;
 
-    // Define public routes that don't require authentication
-    const isPublicRoute =
-      request.nextUrl.pathname.startsWith('/login') ||
-      request.nextUrl.pathname.startsWith('/auth') ||
-      request.nextUrl.pathname === '/' ||
-      request.nextUrl.pathname.match(/\.(svg|png|jpg|jpeg|gif|webp|css|js)$/) ||
-      request.nextUrl.pathname.startsWith('/_next');
+    // Define public routes
+    const publicRoutes = [
+      '/auth',
+      '/login', 
+      '/sign-up',
+      '/_next',
+      '/api/public'
+    ];
+    
+    const isPublicRoute = publicRoutes.some(route => 
+      request.nextUrl.pathname.startsWith(route)
+    ) || request.nextUrl.pathname === '/' ||
+        /\.(svg|png|jpg|jpeg|gif|webp|css|js|ico)$/.test(request.nextUrl.pathname);
 
-    // If no user and trying to access protected route, redirect to login
+    // Handle auth callback with timestamp (post-login)
+    if (request.nextUrl.searchParams.has('t')) {
+      return response;
+    }
+
+    // Redirect unauthenticated users from protected routes
     if (!user && !isPublicRoute) {
-      console.log(
-        `Redirecting unauthenticated user from ${request.nextUrl.pathname} to /auth/login`,
-      );
       const url = request.nextUrl.clone();
       url.pathname = '/auth/login';
       return NextResponse.redirect(url);
     }
 
-    // If user is authenticated and trying to access a public auth route, redirect to /organization
-    if (
-      user &&
-      (request.nextUrl.pathname.startsWith('/auth') ||
-        request.nextUrl.pathname.startsWith('/login') ||
-        request.nextUrl.pathname.startsWith('/sign-up'))
-    ) {
+    // Redirect authenticated users from auth pages
+    if (user && (request.nextUrl.pathname.startsWith('/auth') || 
+                 request.nextUrl.pathname.startsWith('/login') ||
+                 request.nextUrl.pathname.startsWith('/sign-up'))) {
       const url = request.nextUrl.clone();
       url.pathname = '/organization';
       return NextResponse.redirect(url);
     }
 
-    // If user is authenticated and trying to access certain routes, handle organization checks
-    if (
-      user &&
-      (request.nextUrl.pathname === '/protected' ||
-        request.nextUrl.pathname === '/' ||
-        request.nextUrl.pathname === '/organization')
-    ) {
+    // Handle organization routing for authenticated users
+    if (user && (request.nextUrl.pathname === '/' || 
+                 request.nextUrl.pathname === '/organization' ||
+                 request.nextUrl.pathname === '/protected')) {
+      
+      // Check user organizations (with error handling)
       try {
-        // Check if user has organizations
-        const { data: organizations, error: orgError } = await supabase
+        const { data: organizations } = await supabase
           .from('OrganizationMembers')
           .select('organization_id')
-          .eq('profile_id', session?.user?.id);
+          .eq('profile_id', user.id)
+          .limit(1); // Only need to check if any exist
 
-        if (orgError) {
-          console.error(
-            'Error checking organizations in middleware:',
-            orgError.message,
-          );
-          // Continue with the request despite the error
-          return supabaseResponse;
-        }
+        const hasOrganizations = organizations && organizations.length > 0;
 
-        // If no organizations, redirect to create organization page
-        if (!organizations?.length) {
-          console.log(
-            `Redirecting user ${user.id} to /create-organization (no organizations found)`,
-          );
+        // Redirect to create organization if none exist
+        if (!hasOrganizations && request.nextUrl.pathname !== '/create-organization') {
           const url = request.nextUrl.clone();
           url.pathname = '/create-organization';
           return NextResponse.redirect(url);
         }
 
-        // If accessing root or /protected, redirect to organization page
-        if (
-          request.nextUrl.pathname === '/' ||
-          request.nextUrl.pathname === '/protected'
-        ) {
-          console.log(
-            `Redirecting user ${user.id} from ${request.nextUrl.pathname} to /organization`,
-          );
+        // Redirect root to organization page if user has organizations
+        if (hasOrganizations && (request.nextUrl.pathname === '/' || 
+                                request.nextUrl.pathname === '/protected')) {
           const url = request.nextUrl.clone();
           url.pathname = '/organization';
           return NextResponse.redirect(url);
         }
       } catch (error) {
-        // Log the error but don't throw it
-        console.error('Error in middleware organization check:', error);
-        // Continue with the request despite the error
-        return supabaseResponse;
+        console.error('Organization check failed:', error);
+        // Continue with request on database error
       }
     }
 
-    return supabaseResponse;
+    return response;
   } catch (error) {
-    // Catch any unexpected errors
-    console.error('Unexpected error in middleware:', error);
-    // Return the original response to avoid breaking the app
-    return supabaseResponse;
+    console.error('Middleware error:', error);
+    // Return basic response on any error to avoid breaking the app
+    return NextResponse.next({ request });
   }
 }

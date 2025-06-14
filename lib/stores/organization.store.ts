@@ -7,7 +7,6 @@ import type {
 } from '@/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { encryptData, decryptData } from '@/lib/encryption';
 import {
   createOrganization as createOrg,
   deleteOrganization as deleteOrg,
@@ -229,24 +228,24 @@ export const useOrganizationStore = create<OrganizationStore>()(
       name: 'organization-store',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        organizations: encryptData(state.organizations),
-        memberships: encryptData(state.memberships),
-        invitations: encryptData(state.invitations),
-        currentOrganization: encryptData(state.currentOrganization),
+        organizations: state.organizations,
+        memberships: state.memberships,
+        invitations: state.invitations,
+        currentOrganization: state.currentOrganization,
       }),
       merge: (persistedState: any, currentState: OrganizationStore) => ({
         ...currentState,
         organizations: Array.isArray(persistedState.organizations) 
-          ? decryptData(persistedState.organizations) 
+          ? persistedState.organizations 
           : [],
         memberships: Array.isArray(persistedState.memberships)
-          ? decryptData(persistedState.memberships)
+          ? persistedState.memberships
           : [],
         invitations: Array.isArray(persistedState.invitations)
-          ? decryptData(persistedState.invitations)
+          ? persistedState.invitations
           : [],
         currentOrganization: persistedState.currentOrganization
-          ? decryptData(persistedState.currentOrganization)
+          ? persistedState.currentOrganization
           : null,
       }),
     },

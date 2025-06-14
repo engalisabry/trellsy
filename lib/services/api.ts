@@ -4,76 +4,44 @@ import { createClient } from '@/lib/supabase/client';
 import { getSession } from '../supabase/server';
 import { handleError } from '../error-handling';
 
+/**
+ * Get Supabase client for server-side operations
+ */
 export const getSupabaseClient = async () => {
   const session = await getSession();
   return createClient(session?.access_token);
 };
 
-// export const withSupabase = async <T>(
-//   operation: (supabase: any, userId: string) => Promise<T>,
-// ): Promise<T> => {
-//   const supabase = await getSupabaseClient();
-
-//   const {
-//     data: { user },
-//     error,
-//   } = await supabase.auth.getUser();
-
-//   if (error || !user) {
-//     console.error('Authentication error:', error);
-//     toast.error('Authentication failed. Please log in.');
-//     throw new Error('Not authenticated');
-//   }
-
-//   const userId = user.id.toString();
-//   if (!userId) {
-//     toast.error('Invalid user ID');
-//     throw new Error('Invalid user ID');
-//   }
-
-//   return operation(supabase, userId);
-// };
-
+/**
+ * Server-side Higher-Order Function for authenticated Supabase operations
+ * Use in server components, server actions, and API routes
+ */
 export const withSupabase = async <T>(
   callback: (supabase: SupabaseClient, userId: string) => Promise<T>,
 ): Promise<T> => {
-  // Create client with server-side session
   const session = await getSession();
   const supabase = createClient(session?.access_token);
 
-  if (!session) {
+  if (!session?.user?.id) {
     return handleError(
-      new Error('No session available'),
+      new Error('Authentication required'),
       {
         category: 'auth',
-        defaultMessage: 'Authentication required',
+        defaultMessage: 'Please sign in to continue',
         showToast: true,
         throwError: true,
       }
     ) as never;
   }
 
-  const userId = session.user?.id;
-  if (!userId) {
-    return handleError(
-      new Error('User ID not found in session'),
-      {
-        category: 'auth',
-        defaultMessage: 'User ID not found',
-        showToast: true,
-        throwError: true,
-      }
-    ) as never;
-  }
-
-  // Verify the token is still valid
+  // Verify token validity
   const { error: authError } = await supabase.auth.getUser();
   if (authError) {
     return handleError(
       authError,
       {
         category: 'auth',
-        defaultMessage: 'Authentication failed',
+        defaultMessage: 'Session expired. Please sign in again.',
         showToast: true,
         throwError: true,
       }
@@ -81,11 +49,67 @@ export const withSupabase = async <T>(
   }
 
   try {
-    return await callback(supabase, userId);
+    return await callback(supabase, session.user.id);
   } catch (error) {
-    // Pass through to the caller who should handle this with handleError
-    throw error;
+    throw error; // Let caller handle with handleError
   }
+};
+
+/**
+ * Client-side Higher-Order Function for authenticated operations
+ * Use in client components that require authentication
+ */
+export const withSupabaseClient = async <T>(
+  callback: (supabase: SupabaseClient, userId?: string) => Promise<T>,
+): Promise<T> => {
+  const supabase = createClient();
+  
+  try {
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    
+    if (authError) {
+      return handleError(
+        authError,
+        {
+          category: 'auth',
+          defaultMessage: 'Authentication failed',
+          showToast: true,
+          throwError: true,
+        }
+      ) as never;
+    }
+    
+    return await callback(supabase, user?.id);
+  } catch (error) {
+    throw error; // Let caller handle with handleError
+  }
+};
+
+/**
+ * Client-side Higher-Order Function for authentication operations
+ * Use for login, signup, password reset, etc. (operations that don't require existing session)
+ */
+export const withSupabaseAuth = async <T>(
+  callback: (supabase: SupabaseClient) => Promise<T>,
+): Promise<T> => {
+  const supabase = createClient();
+  
+  try {
+    return await callback(supabase);
+  } catch (error) {
+    throw error; // Let caller handle with handleError
+  }
+};
+
+/**
+ * Simplified client-side wrapper that doesn't require authentication
+ * Use for public operations or when authentication is optional
+ */
+export const withSupabasePublic = async <T>(
+  callback: (supabase: SupabaseClient) => Promise<T>,
+): Promise<T> => {
+  const supabase = createClient();
+  return await callback(supabase);
 };
 
 /**
@@ -99,6 +123,7 @@ export const handleApiError = (
     context?: Record<string, unknown>;
   }
 ) => {
+  console.warn('handleApiError is deprecated. Use handleError from error-handling.ts instead.');
   return handleError(error, {
     defaultMessage,
     throwError: options?.throwError ?? false,
