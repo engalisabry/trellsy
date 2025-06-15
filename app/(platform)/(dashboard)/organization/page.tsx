@@ -3,10 +3,11 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useOrganizationStore } from '@/lib/stores';
+import { User } from '@supabase/supabase-js';
 
 const OrganizationPage = () => {
   const [isLoading, setIsLoading] = useState(true);
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
   const [authDebug, setAuthDebug] = useState({});
   const { fetchOrganizations, organizations, error: orgError } = useOrganizationStore();
   
@@ -40,7 +41,7 @@ const OrganizationPage = () => {
           sessionExpiry: sessionData.session?.expires_at,
           cookies: document.cookie,
           isFromOAuth,
-          error: sessionData.error?.message || userData.error?.message
+          error: ((sessionData as any).error?.message || (userData as any).error?.message) || null
         };
         
         console.log('Client-side auth debug:', debugInfo);

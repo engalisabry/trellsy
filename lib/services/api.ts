@@ -26,10 +26,10 @@ export const withSupabase = async <T>(
     return handleError(
       new Error('Authentication required'),
       {
-        category: 'auth',
         defaultMessage: 'Please sign in to continue',
         showToast: true,
         throwError: true,
+        context: { category: 'auth' }
       }
     ) as never;
   }
@@ -40,10 +40,10 @@ export const withSupabase = async <T>(
     return handleError(
       authError,
       {
-        category: 'auth',
         defaultMessage: 'Session expired. Please sign in again.',
         showToast: true,
         throwError: true,
+        context: { category: 'auth' }
       }
     ) as never;
   }
@@ -71,10 +71,10 @@ export const withSupabaseClient = async <T>(
       return handleError(
         authError,
         {
-          category: 'auth',
           defaultMessage: 'Authentication failed',
           showToast: true,
           throwError: true,
+          context: { category: 'auth' }
         }
       ) as never;
     }

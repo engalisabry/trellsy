@@ -40,7 +40,8 @@ export async function updateSession(request: NextRequest) {
       '/login', 
       '/sign-up',
       '/_next',
-      '/api/public'
+      '/api/public',
+      '/create-organization' // Added this route as it needs to be accessible
     ];
     
     const isPublicRoute = publicRoutes.some(route => 
@@ -72,7 +73,8 @@ export async function updateSession(request: NextRequest) {
     // Handle organization routing for authenticated users
     if (user && (request.nextUrl.pathname === '/' || 
                  request.nextUrl.pathname === '/organization' ||
-                 request.nextUrl.pathname === '/protected')) {
+                 request.nextUrl.pathname === '/protected' ||
+                 request.nextUrl.pathname === '/create-organization')) {
       
       // Check user organizations (with error handling)
       try {
