@@ -78,7 +78,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
           return organizations.find(org => org.name === props.name) || false;
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
-          throw error;
+          return false;
         } finally {
           set({ isLoading: false });
         }

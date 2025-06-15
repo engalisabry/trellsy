@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { handleError } from '@/lib/error-handling';
 import type {
   Organization,
   OrganizationCreateInput,
@@ -30,7 +31,7 @@ const organizationSchema = z.object({
  */
 export const createOrganization = async (
   props: OrganizationCreateInput & { logo?: File },
-) => {
+): Promise<Organization | false> => {
   return withSupabase(async (supabase, userId) => {
     try {
       if (!userId) {
@@ -106,14 +107,14 @@ export const createOrganization = async (
         throw new Error('Organization creation returned no data');
       }
 
-      // The rest of your function...
+      return orgData;
     } catch (error) {
       handleError(error, {
         defaultMessage: 'Failed to create organization',
         context: { action: 'createOrganization', props },
-        showToast: true,
-        throwError: true,
+        showToast: true
       });
+      return false;
     }
   });
 };
@@ -177,7 +178,11 @@ export const fetchUserOrganizationsServer = async (): Promise<{
 
       return { organizations, memberships };
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to fetch organizations',
+        context: { action: 'fetchUserOrganizations' },
+        showToast: true
+      });
       return { organizations: [], memberships: [] };
     }
   });
@@ -242,13 +247,21 @@ export const updateOrganization = async (
         .single();
 
       if (error) {
-        handleApiError(error, 'Failed to update organization');
+        handleError(error, {
+          defaultMessage: 'Failed to update organization',
+          context: { action: 'updateOrganization', id },
+          showToast: true
+        });
         return false;
       }
 
       return data;
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to update organization',
+        context: { action: 'updateOrganization', id },
+        showToast: true
+      });
       return false;
     }
   });
@@ -267,13 +280,21 @@ export const deleteOrganization = async (id: string) => {
         .eq('created_by', userId);
 
       if (error) {
-        handleApiError(error, 'Failed to delete organization');
+        handleError(error, {
+          defaultMessage: 'Failed to delete organization',
+          context: { action: 'deleteOrganization', id },
+          showToast: true
+        });
         return false;
       }
 
       return true;
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to delete organization',
+        context: { action: 'deleteOrganization', id },
+        showToast: true
+      });
       return false;
     }
   });
@@ -308,13 +329,21 @@ export const inviteToOrganization = async (
         .single();
 
       if (error) {
-        handleApiError(error, 'Failed to delete organization');
+        handleError(error, {
+          defaultMessage: 'Failed to create organization invitation',
+          context: { action: 'inviteToOrganization', organization_id, email },
+          showToast: true
+        });
         return false;
       }
 
       return data as OrganizationInvitation;
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to create organization invitation',
+        context: { action: 'inviteToOrganization', organization_id, email },
+        showToast: true
+      });
       return false;
     }
   });
@@ -331,13 +360,21 @@ export const listOrganizationInvitations = async (organization_id: string) => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        handleApiError(error, "Can't get invitations list");
+        handleError(error, {
+          defaultMessage: "Can't get invitations list",
+          context: { action: 'listOrganizationInvitations', organization_id },
+          showToast: true
+        });
         return error;
       }
 
       return (Array.isArray(data) ? data : []) as OrganizationInvitation[];
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: "Failed to get invitations list",
+        context: { action: 'listOrganizationInvitations', organization_id },
+        showToast: true
+      });
       return false;
     }
   });
@@ -361,13 +398,21 @@ export const resendOrganizationInvitation = async (invitation_id: string) => {
         .single();
 
       if (error) {
-        handleApiError(error, 'Failed to resend invitation');
+        handleError(error, {
+          defaultMessage: 'Failed to resend invitation',
+          context: { action: 'resendOrganizationInvitation', invitation_id },
+          showToast: true
+        });
         return false;
       }
 
       return data as OrganizationInvitation;
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to resend invitation',
+        context: { action: 'resendOrganizationInvitation', invitation_id },
+        showToast: true
+      });
       return false;
     }
   });
@@ -388,13 +433,21 @@ export const revokeOrganizationInvitation = async (invitation_id: string) => {
         .single();
 
       if (error) {
-        handleApiError(error, 'Failed revoke invitation');
+        handleError(error, {
+          defaultMessage: 'Failed to revoke invitation',
+          context: { action: 'revokeOrganizationInvitation', invitation_id },
+          showToast: true
+        });
         return false;
       }
 
       return data as OrganizationInvitation;
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to revoke invitation',
+        context: { action: 'revokeOrganizationInvitation', invitation_id },
+        showToast: true
+      });
       return false;
     }
   });
@@ -415,7 +468,11 @@ export const acceptOrganizationInvitation = async (
         .single();
 
       if (inviteError || !invite) {
-        handleApiError(inviteError, "Can't get invitations");
+        handleError(inviteError, {
+          defaultMessage: "Can't find invitation",
+          context: { action: 'acceptOrganizationInvitation', token },
+          showToast: true
+        });
         return false;
       }
 
@@ -429,10 +486,11 @@ export const acceptOrganizationInvitation = async (
         });
 
       if (memberError) {
-        handleApiError(
-          memberError,
-          'Failed to add user as organization member',
-        );
+        handleError(memberError, {
+          defaultMessage: 'Failed to add user as organization member',
+          context: { action: 'acceptOrganizationInvitation', token, profile_id },
+          showToast: true
+        });
         return false;
       }
 
@@ -446,13 +504,21 @@ export const acceptOrganizationInvitation = async (
         .eq('id', invite.id);
 
       if (updateError) {
-        handleApiError(updateError, 'Failed to update status of invitation');
+        handleError(updateError, {
+          defaultMessage: 'Failed to update status of invitation',
+          context: { action: 'acceptOrganizationInvitation', token, profile_id },
+          showToast: true
+        });
         return false;
       }
 
       return true;
     } catch (error) {
-      handleApiError(error);
+      handleError(error, {
+        defaultMessage: 'Failed to accept invitation',
+        context: { action: 'acceptOrganizationInvitation', token, profile_id },
+        showToast: true
+      });
       return false;
     }
   });

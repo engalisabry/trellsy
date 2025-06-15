@@ -26,7 +26,7 @@ export const withSupabase = async <T>(
     return handleError(
       new Error('Authentication required'),
       {
-        defaultMessage: 'Please sign in to continue',
+        defaultMessage: 'Authentication required',
         showToast: true,
         throwError: true,
         context: { category: 'auth' }
@@ -34,12 +34,24 @@ export const withSupabase = async <T>(
     ) as never;
   }
 
-  // Verify token validity
+  const userId = session.user?.id;
+  if (!userId) {
+    return handleError(
+      new Error('User ID not found in session'),
+      {
+        defaultMessage: 'User ID not found',
+        showToast: true,
+        throwError: true,
+      }
+    ) as never;
+  }
+
   const { error: authError } = await supabase.auth.getUser();
   if (authError) {
     return handleError(
       authError,
       {
+        defaultMessage: 'Authentication failed',
         defaultMessage: 'Session expired. Please sign in again.',
         showToast: true,
         throwError: true,
