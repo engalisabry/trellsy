@@ -7,7 +7,6 @@ import type {
 } from '@/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
-import { encryptData, decryptData } from '@/lib/encryption';
 import {
   createOrganization as createOrg,
   deleteOrganization as deleteOrg,
@@ -72,14 +71,11 @@ export const useOrganizationStore = create<OrganizationStore>()(
       createOrganization: async (props: OrganizationCreateInput) => {
         set({ isLoading: true, error: null });
         try {
-          const newOrg = await createOrg(props);
-          if (!newOrg) {
-            set({ isSuccess: false, error: new Error('Failed to create organization') });
-            return false;
-          }
-          await get().fetchOrganizations();
+          await createOrg(props);
+          const { organizations } = await get().fetchOrganizations();
           set({ isSuccess: true });
-          return newOrg;
+          // Return the newly created organization
+          return organizations.find(org => org.name === props.name) || false;
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
           return false;
@@ -90,14 +86,14 @@ export const useOrganizationStore = create<OrganizationStore>()(
 
       hasRole: (organizationId: string, role: string) => {
         const membership = get().memberships.find(
-          m => m.organization_id === organizationId
+          (m: OrganizationMember) => m.organization_id === organizationId
         );
         return membership?.role === role;
       },
 
       isMember: (organizationId: string) => {
         return get().memberships.some(
-          m => m.organization_id === organizationId
+          (m: OrganizationMember) => m.organization_id === organizationId
         );
       },
 
@@ -110,7 +106,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
           await updateOrg(id, data);
 
           const currentOrgs = get().organizations;
-          const updatedOrgs = currentOrgs.map((org) =>
+          const updatedOrgs = currentOrgs.map((org: Organization) =>
             org.id === id ? { ...org, ...data } : org,
           );
 
@@ -130,7 +126,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
 
           // Update local state
           const currentOrgs = get().organizations;
-          const filteredOrgs = currentOrgs.filter((org) => org.id !== id);
+          const filteredOrgs = currentOrgs.filter((org: Organization) => org.id !== id);
 
           set({ organizations: filteredOrgs, isSuccess: true });
         } catch (error) {
@@ -172,7 +168,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
           await resendOrganizationInvitation(invitation_id);
           // Find the org_id for this invitation
           const orgId = get().invitations.find(
-            (inv) => inv.id === invitation_id,
+            (inv: OrganizationInvitation) => inv.id === invitation_id,
           )?.organization_id;
           if (orgId) await get().fetchInvitations(orgId);
         } catch (error) {
@@ -187,7 +183,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
         try {
           await revokeOrganizationInvitation(invitation_id);
           const orgId = get().invitations.find(
-            (inv) => inv.id === invitation_id,
+            (inv: OrganizationInvitation) => inv.id === invitation_id,
           )?.organization_id;
           if (orgId) await get().fetchInvitations(orgId);
         } catch (error) {
@@ -198,7 +194,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
       },
 
       setCurrentOrganization: (slug: string) => {
-        const org = get().organizations.find((o) => o.slug === slug);
+        const org = get().organizations.find((o: Organization) => o.slug === slug);
         if (!org) {
           console.warn(`Organization with slug ${slug} not found`);
           set({ currentOrganization: null });
@@ -231,24 +227,24 @@ export const useOrganizationStore = create<OrganizationStore>()(
       name: 'organization-store',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        organizations: encryptData(state.organizations),
-        memberships: encryptData(state.memberships),
-        invitations: encryptData(state.invitations),
-        currentOrganization: encryptData(state.currentOrganization),
+        organizations: state.organizations,
+        memberships: state.memberships,
+        invitations: state.invitations,
+        currentOrganization: state.currentOrganization,
       }),
       merge: (persistedState: any, currentState: OrganizationStore) => ({
         ...currentState,
         organizations: Array.isArray(persistedState.organizations) 
-          ? decryptData(persistedState.organizations) 
+          ? persistedState.organizations 
           : [],
         memberships: Array.isArray(persistedState.memberships)
-          ? decryptData(persistedState.memberships)
+          ? persistedState.memberships
           : [],
         invitations: Array.isArray(persistedState.invitations)
-          ? decryptData(persistedState.invitations)
+          ? persistedState.invitations
           : [],
         currentOrganization: persistedState.currentOrganization
-          ? decryptData(persistedState.currentOrganization)
+          ? persistedState.currentOrganization
           : null,
       }),
     },

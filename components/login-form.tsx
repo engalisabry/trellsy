@@ -13,6 +13,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/lib/stores';
+import { useAuth } from '@/lib/hooks/use-auth';
 import { cn } from '@/lib/utils';
 import { GoogleButton } from './google-button';
 

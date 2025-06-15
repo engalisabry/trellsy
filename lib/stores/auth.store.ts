@@ -1,10 +1,9 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { loginWithEmailPassword, loginWithGoogleOAuth, logout } from '../services/auth.service';
-import { encryptData } from '@/lib/encryption';
 
-interface AuthState {
-  isAuthenticated: boolean;
+// Simplified auth store for UI state only - no sensitive data
+interface AuthUIState {
   isLoading: boolean;
   isSuccess: boolean;
   error: Error | null;
@@ -17,10 +16,9 @@ interface AuthState {
   clearState: () => void;
 }
 
-export const useAuthStore = create<AuthState>()(
+export const useAuthStore = create<AuthUIState>()(
   persist(
     (set, get) => ({
-      isAuthenticated: false,
       isLoading: false,
       isSuccess: false,
       error: null,
@@ -29,7 +27,7 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           await loginWithEmailPassword(email, password);
-          set({ isAuthenticated: true, isSuccess: true });
+          set({ isSuccess: true });
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
         } finally {
@@ -41,7 +39,8 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         try {
           await loginWithGoogleOAuth();
-          set({ isAuthenticated: true, isSuccess: true });
+          // OAuth flow will handle redirect and session establishment
+          set({ isSuccess: true });
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
         } finally {
@@ -64,17 +63,28 @@ export const useAuthStore = create<AuthState>()(
       clearErrors: () => set({ error: null }),
       
       clearState: () => set({
-        isAuthenticated: false,
         isSuccess: false,
         error: null
       }),
     }),
     {
-      name: 'auth-store',
+      name: 'auth-ui-store',
       storage: createJSONStorage(() => sessionStorage),
+      // Only persist non-sensitive UI state
       partialize: (state) => ({
-        isAuthenticated: encryptData(state.isAuthenticated),
+        isLoading: state.isLoading,
+        // Remove any sensitive authentication state from persistence
       }),
     }
   )
 );
+
+// Legacy compatibility - will be deprecated
+export const useAuthStoreCompat = () => {
+  const store = useAuthStore();
+  return {
+    ...store,
+    // Map old property names for backward compatibility
+    isAuthenticated: false, // Always false - use useAuth hook instead
+  };
+};
