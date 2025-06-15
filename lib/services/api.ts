@@ -45,7 +45,6 @@ export const withSupabase = async <T>(
     return handleError(
       new Error('No session available'),
       {
-        category: 'auth',
         defaultMessage: 'Authentication required',
         showToast: true,
         throwError: true,
@@ -58,7 +57,6 @@ export const withSupabase = async <T>(
     return handleError(
       new Error('User ID not found in session'),
       {
-        category: 'auth',
         defaultMessage: 'User ID not found',
         showToast: true,
         throwError: true,
@@ -72,7 +70,6 @@ export const withSupabase = async <T>(
     return handleError(
       authError,
       {
-        category: 'auth',
         defaultMessage: 'Authentication failed',
         showToast: true,
         throwError: true,

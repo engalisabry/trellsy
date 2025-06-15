@@ -73,14 +73,16 @@ export const useOrganizationStore = create<OrganizationStore>()(
         set({ isLoading: true, error: null });
         try {
           const newOrg = await createOrg(props);
-          if (!newOrg) throw new Error('Failed to create organization');
-          
+          if (!newOrg) {
+            set({ isSuccess: false, error: new Error('Failed to create organization') });
+            return false;
+          }
           await get().fetchOrganizations();
           set({ isSuccess: true });
           return newOrg;
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
-          throw error;
+          return false;
         } finally {
           set({ isLoading: false });
         }

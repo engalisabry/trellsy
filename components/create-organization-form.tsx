@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   checkSlugAvailability,
@@ -13,6 +14,7 @@ import { Label } from './ui/label';
 import { Text } from './ui/text';
 
 export function CreateOrganizationForm() {
+  const router = useRouter();
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [logo, setLogo] = useState<File | null>(null);
@@ -74,11 +76,7 @@ export function CreateOrganizationForm() {
       });
 
       toast.success(`Organization "${name}" created successfully!`);
-      // Reset form
-      setName('');
-      setSlug('');
-      setLogo(null);
-      (e.target as HTMLFormElement).reset();
+      router.push('/organization');
     } catch (error) {
       toast.error('Failed to create organization');
       console.error(error);
