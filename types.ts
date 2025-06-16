@@ -158,3 +158,13 @@ export interface OrganizationInvitation {
   revoked_at?: string | null;
   metadata?: Record<string, unknown>;
 }
+
+export type ErrorCategory =
+  | 'auth'
+  | 'permission'
+  | 'validation'
+  | 'notFound'
+  | 'server'
+  | 'network'
+  | 'database'
+  | 'unknown';

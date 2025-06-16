@@ -1,30 +1,12 @@
-import { redirect } from 'next/navigation';
-import { handleError } from '@/lib/error-handling';
 import type {
   Organization,
   OrganizationCreateInput,
   OrganizationInvitation,
   OrganizationMember,
 } from '@/types';
-import { z } from 'zod';
-import { handleApiError, withSupabase, withSupabaseClient } from './api';
-import { handleError } from '../error-handling';
+import { handleError } from '@/lib/error-handling';
+import { withSupabase } from './api';
 import { uploadFile } from './file-upload.service';
-
-// Validation schemas
-const organizationSchema = z.object({
-  name: z.string().min(1, 'Name is required').max(100),
-  slug: z
-    .string()
-    .min(3, 'Slug must be at least 3 characters')
-    .max(50, 'Slug must be less than 50 characters')
-    .regex(
-      /^[a-z0-9-]+$/,
-      'Slug can only contain lowercase letters, numbers, and hyphens',
-    ),
-
-  logo_url: z.string().url().optional(),
-});
 
 /**
  * Creates a new organization with validation
@@ -35,26 +17,18 @@ export const createOrganization = async (
   return withSupabase(async (supabase, userId) => {
     try {
       if (!userId) {
-        console.error('No user ID available for organization creation');
-        throw new Error('User ID is required for organization creation');
+        handleError('auth', {
+          showToast: true,
+        });
       }
-
-      console.log('Auth context for organization creation:', {
-        userId,
-        session: await supabase.auth.getSession(),
-        user: await supabase.auth.getUser(),
-      });
 
       // Handle logo upload
       let logo_url = props.logo_url;
       if (props.logo && props.logo instanceof File) {
         try {
-          console.log('Uploading logo file:', props.logo.name);
           logo_url = await uploadFile(props.logo, 'organization-logos');
-          console.log('Logo uploaded successfully, URL:', logo_url);
         } catch (error) {
-          console.error('Logo upload failed:', error);
-          // Continue without logo if upload fails
+          handleError('unknown');
         }
       }
 
@@ -65,38 +39,13 @@ export const createOrganization = async (
         logo_url,
       };
 
-      console.log('Organization creation auth context:', {
-        userId,
-        userIdType: typeof userId,
-        session: await supabase.auth.getSession(),
-        user: await supabase.auth.getUser(),
-      });
-
-      console.log('Organization insert data:', insertData);
-
       const insertQuery = supabase
         .from('Organization')
         .insert(insertData)
         .select()
         .single();
 
-      console.log('Organization insert query:', {
-        sql: insertQuery.toString(),
-        params: {
-          name: props.name,
-          slug: props.slug,
-          userId,
-          logo_url: props.logo_url,
-        },
-      });
-
       const { data: orgData, error: orgError } = await insertQuery;
-
-      console.log('Organization creation attempt with:', {
-        name: props.name,
-        slug: props.slug,
-        userId: userId,
-      });
 
       if (orgError) {
         console.error('Organization creation failed:', orgError);
@@ -112,7 +61,7 @@ export const createOrganization = async (
       handleError(error, {
         defaultMessage: 'Failed to create organization',
         context: { action: 'createOrganization', props },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -159,7 +108,11 @@ export const fetchUserOrganizationsServer = async (): Promise<{
   memberships: OrganizationMember[];
 }> => {
   return withSupabase(async (supabase, userId) => {
-    if (!userId) throw new Error('User ID is required');
+    if (!userId) {
+      handleError('auth', {
+        showToast: true,
+      });
+    }
 
     try {
       const [orgsResult, membershipsResult] = await Promise.all([
@@ -181,7 +134,7 @@ export const fetchUserOrganizationsServer = async (): Promise<{
       handleError(error, {
         defaultMessage: 'Failed to fetch organizations',
         context: { action: 'fetchUserOrganizations' },
-        showToast: true
+        showToast: true,
       });
       return { organizations: [], memberships: [] };
     }
@@ -196,16 +149,13 @@ export const fetchUserOrganizations = async (): Promise<{
   organizations: Organization[];
   memberships: OrganizationMember[];
 }> => {
-  return withSupabaseClient(async (supabase) => {
+  return withSupabase(async (supabase, userId) => {
     try {
-      // Get current user
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      
-      if (userError || !user) {
-        throw new Error('User not authenticated');
+      if (userId) {
+        handleError('auth', {
+          showToast: true,
+        });
       }
-
-      const userId = user.id;
 
       const [orgsResult, membershipsResult] = await Promise.all([
         supabase.from('Organization').select('*').eq('created_by', userId),
@@ -223,7 +173,11 @@ export const fetchUserOrganizations = async (): Promise<{
 
       return { organizations, memberships };
     } catch (error) {
-      handleApiError(error, 'Failed to fetch organizations', { throwError: true });
+      handleError(error, {
+        defaultMessage: 'Failed to fetch organizations',
+        context: { action: 'fetchUserOrganizations' },
+        showToast: true,
+      });
       return { organizations: [], memberships: [] };
     }
   });
@@ -250,7 +204,7 @@ export const updateOrganization = async (
         handleError(error, {
           defaultMessage: 'Failed to update organization',
           context: { action: 'updateOrganization', id },
-          showToast: true
+          showToast: true,
         });
         return false;
       }
@@ -260,7 +214,7 @@ export const updateOrganization = async (
       handleError(error, {
         defaultMessage: 'Failed to update organization',
         context: { action: 'updateOrganization', id },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -283,7 +237,7 @@ export const deleteOrganization = async (id: string) => {
         handleError(error, {
           defaultMessage: 'Failed to delete organization',
           context: { action: 'deleteOrganization', id },
-          showToast: true
+          showToast: true,
         });
         return false;
       }
@@ -293,7 +247,7 @@ export const deleteOrganization = async (id: string) => {
       handleError(error, {
         defaultMessage: 'Failed to delete organization',
         context: { action: 'deleteOrganization', id },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -332,7 +286,7 @@ export const inviteToOrganization = async (
         handleError(error, {
           defaultMessage: 'Failed to create organization invitation',
           context: { action: 'inviteToOrganization', organization_id, email },
-          showToast: true
+          showToast: true,
         });
         return false;
       }
@@ -342,7 +296,7 @@ export const inviteToOrganization = async (
       handleError(error, {
         defaultMessage: 'Failed to create organization invitation',
         context: { action: 'inviteToOrganization', organization_id, email },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -363,7 +317,7 @@ export const listOrganizationInvitations = async (organization_id: string) => {
         handleError(error, {
           defaultMessage: "Can't get invitations list",
           context: { action: 'listOrganizationInvitations', organization_id },
-          showToast: true
+          showToast: true,
         });
         return error;
       }
@@ -371,9 +325,9 @@ export const listOrganizationInvitations = async (organization_id: string) => {
       return (Array.isArray(data) ? data : []) as OrganizationInvitation[];
     } catch (error) {
       handleError(error, {
-        defaultMessage: "Failed to get invitations list",
+        defaultMessage: 'Failed to get invitations list',
         context: { action: 'listOrganizationInvitations', organization_id },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -401,7 +355,7 @@ export const resendOrganizationInvitation = async (invitation_id: string) => {
         handleError(error, {
           defaultMessage: 'Failed to resend invitation',
           context: { action: 'resendOrganizationInvitation', invitation_id },
-          showToast: true
+          showToast: true,
         });
         return false;
       }
@@ -411,7 +365,7 @@ export const resendOrganizationInvitation = async (invitation_id: string) => {
       handleError(error, {
         defaultMessage: 'Failed to resend invitation',
         context: { action: 'resendOrganizationInvitation', invitation_id },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -436,7 +390,7 @@ export const revokeOrganizationInvitation = async (invitation_id: string) => {
         handleError(error, {
           defaultMessage: 'Failed to revoke invitation',
           context: { action: 'revokeOrganizationInvitation', invitation_id },
-          showToast: true
+          showToast: true,
         });
         return false;
       }
@@ -446,7 +400,7 @@ export const revokeOrganizationInvitation = async (invitation_id: string) => {
       handleError(error, {
         defaultMessage: 'Failed to revoke invitation',
         context: { action: 'revokeOrganizationInvitation', invitation_id },
-        showToast: true
+        showToast: true,
       });
       return false;
     }
@@ -471,7 +425,7 @@ export const acceptOrganizationInvitation = async (
         handleError(inviteError, {
           defaultMessage: "Can't find invitation",
           context: { action: 'acceptOrganizationInvitation', token },
-          showToast: true
+          showToast: true,
         });
         return false;
       }
@@ -488,8 +442,12 @@ export const acceptOrganizationInvitation = async (
       if (memberError) {
         handleError(memberError, {
           defaultMessage: 'Failed to add user as organization member',
-          context: { action: 'acceptOrganizationInvitation', token, profile_id },
-          showToast: true
+          context: {
+            action: 'acceptOrganizationInvitation',
+            token,
+            profile_id,
+          },
+          showToast: true,
         });
         return false;
       }
@@ -506,8 +464,12 @@ export const acceptOrganizationInvitation = async (
       if (updateError) {
         handleError(updateError, {
           defaultMessage: 'Failed to update status of invitation',
-          context: { action: 'acceptOrganizationInvitation', token, profile_id },
-          showToast: true
+          context: {
+            action: 'acceptOrganizationInvitation',
+            token,
+            profile_id,
+          },
+          showToast: true,
         });
         return false;
       }
@@ -517,7 +479,7 @@ export const acceptOrganizationInvitation = async (
       handleError(error, {
         defaultMessage: 'Failed to accept invitation',
         context: { action: 'acceptOrganizationInvitation', token, profile_id },
-        showToast: true
+        showToast: true,
       });
       return false;
     }

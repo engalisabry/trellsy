@@ -23,6 +23,15 @@ export const Logo = () => {
           className='scale-150'
         />
         <p className={cn('pb-1 text-lg', calFontHeading.className)}>Trellsy</p>
+        <div className='overflow-hidden rounded-4xl bg-white p-3'>
+          <Image
+            src='/work-in-progress.png'
+            alt='beta_logo'
+            width={35}
+            height={35}
+            priority
+          />
+        </div>
       </Link>
     </div>
   );

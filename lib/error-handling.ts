@@ -1,14 +1,5 @@
+import { ErrorCategory } from '@/types';
 import { toast } from 'sonner';
-
-export type ErrorCategory =
-  | 'auth' // Authentication related errors
-  | 'permission' // Permission related errors
-  | 'validation' // Data validation errors
-  | 'notFound' // Resource not found errors
-  | 'server' // Server-side errors
-  | 'network' // Network connectivity errors
-  | 'database' // Database operation errors
-  | 'unknown'; // Uncategorized errors
 
 export interface AppError extends Error {
   category: ErrorCategory;
@@ -24,7 +15,7 @@ export function createAppError(
     statusCode?: number;
     originalError?: unknown;
     context?: Record<string, unknown>;
-  }
+  },
 ): AppError {
   const error = new Error(message) as AppError;
   error.name = 'AppError';
@@ -41,16 +32,13 @@ export function createAppError(
 export function categorizeError(error: unknown): ErrorCategory {
   if (!error) return 'unknown';
 
-  // If it's already an AppError, use its category
   if (isAppError(error)) {
     return error.category;
   }
 
-  // Check if it's a PostgreSQL error from Supabase
   if (isSupabaseError(error)) {
     const pgError = error as { code?: string; message?: string };
-    
-    // Authentication errors
+
     if (
       pgError.message?.includes('JWT') ||
       pgError.message?.includes('auth') ||
@@ -59,8 +47,7 @@ export function categorizeError(error: unknown): ErrorCategory {
     ) {
       return 'auth';
     }
-    
-    // Permission errors
+
     if (
       pgError.message?.includes('permission') ||
       pgError.message?.toLowerCase().includes('access denied') ||
@@ -69,7 +56,7 @@ export function categorizeError(error: unknown): ErrorCategory {
     ) {
       return 'permission';
     }
-    
+
     // Validation errors - usually constraint violations
     if (
       pgError.code?.startsWith('23') ||
@@ -79,18 +66,18 @@ export function categorizeError(error: unknown): ErrorCategory {
     ) {
       return 'validation';
     }
-    
+
     // Not found errors
     if (pgError.code === '404' || pgError.message?.includes('not found')) {
       return 'notFound';
     }
-    
+
     // Database errors
     if (pgError.code?.startsWith('08') || pgError.code?.startsWith('XX')) {
       return 'database';
     }
   }
-  
+
   // Check for network errors
   if (error instanceof Error) {
     if (
@@ -103,7 +90,7 @@ export function categorizeError(error: unknown): ErrorCategory {
       return 'network';
     }
   }
-  
+
   return 'unknown';
 }
 
@@ -124,41 +111,41 @@ export function isAppError(error: unknown): error is AppError {
  */
 export function isSupabaseError(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  
-  // Supabase errors typically have a code and message
-  return ('code' in error || 'message' in error || 'details' in error || 'hint' in error);
+
+  return (
+    'code' in error ||
+    'message' in error ||
+    'details' in error ||
+    'hint' in error
+  );
 }
 
 /**
  * Get a user-friendly error message
  */
 export function getUserFriendlyErrorMessage(error: unknown): string {
-  // If it's already an AppError, use its message
   if (isAppError(error)) {
     return error.message;
   }
 
-  // If it's a regular Error, use its message
   if (error instanceof Error) {
     return error.message;
   }
 
-  // If it's a Supabase error with a message
   if (isSupabaseError(error) && typeof error === 'object' && error !== null) {
     if ('message' in error && typeof error.message === 'string') {
       if (error.message.includes('duplicate key')) {
         return 'This resource already exists. Please try a different name or identifier.';
       }
-      
+
       if (error.message.includes('violates row-level security')) {
-        return 'You don\'t have permission to perform this action.';
+        return "You don't have permission to perform this action.";
       }
-      
+
       return error.message;
     }
   }
 
-  // Default fallback message
   return 'An unexpected error occurred';
 }
 
@@ -172,42 +159,32 @@ export function handleError(
     showToast?: boolean;
     throwError?: boolean;
     context?: Record<string, unknown>;
-  }
+  },
 ): AppError {
-  const defaultMessage = options?.defaultMessage || 'An unexpected error occurred';
+  const defaultMessage =
+    options?.defaultMessage || 'An unexpected error occurred';
   const showToast = options?.showToast ?? true;
   const throwError = options?.throwError ?? false;
-  
-  // Categorize the error
+
   const category = categorizeError(error);
-  
-  // Create a structured error
+
   const appError = createAppError(
     getUserFriendlyErrorMessage(error) || defaultMessage,
     category,
     {
       originalError: error,
       context: options?.context,
-    }
+    },
   );
-  
-  // Log the error with context
-  console.error(`[${category.toUpperCase()}] ${appError.message}`, {
-    error: appError,
-    originalError: error,
-    context: options?.context,
-  });
-  
-  // Show toast notification if requested
+
   if (showToast) {
     showErrorToast(appError);
   }
-  
-  // Throw the error if requested
+
   if (throwError) {
     throw appError;
   }
-  
+
   return appError;
 }
 
@@ -215,8 +192,10 @@ export function handleError(
  * Show an appropriate toast message based on error category
  */
 export function showErrorToast(error: AppError | unknown): void {
-  const appError = isAppError(error) ? error : handleError(error, { showToast: false });
-  
+  const appError = isAppError(error)
+    ? error
+    : handleError(error, { showToast: false });
+
   switch (appError.category) {
     case 'auth':
       toast.error('Authentication error: ' + appError.message, {
@@ -224,42 +203,42 @@ export function showErrorToast(error: AppError | unknown): void {
         duration: 5000,
       });
       break;
-      
+
     case 'permission':
       toast.error('Permission denied: ' + appError.message, {
         description: 'You do not have access to perform this action.',
         duration: 5000,
       });
       break;
-      
+
     case 'validation':
       toast.error('Validation error: ' + appError.message, {
         description: 'Please check your input and try again.',
         duration: 5000,
       });
       break;
-      
+
     case 'notFound':
       toast.error('Not found: ' + appError.message, {
         description: 'The requested resource could not be found.',
         duration: 4000,
       });
       break;
-      
+
     case 'network':
       toast.error('Network error: ' + appError.message, {
         description: 'Please check your internet connection and try again.',
         duration: 5000,
       });
       break;
-      
+
     case 'database':
       toast.error('Database error: ' + appError.message, {
         description: 'There was a problem with the database operation.',
         duration: 5000,
       });
       break;
-      
+
     default:
       toast.error(appError.message, {
         description: 'An unexpected error occurred. Please try again later.',
@@ -267,4 +246,3 @@ export function showErrorToast(error: AppError | unknown): void {
       });
   }
 }
-
