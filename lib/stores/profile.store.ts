@@ -1,4 +1,4 @@
-import { ProfileState } from '@/types';
+import { ProfileState, UserProfile } from '@/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
@@ -18,7 +18,7 @@ export const useProfileStore = create<ProfileState>()(
         set({ isLoading: true, error: null });
         try {
           const profile = await fetchUserProfile();
-          set({ userProfile: profile, isSuccess: true });
+          set({ userProfile: profile as UserProfile, isSuccess: true });
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
         } finally {
@@ -31,7 +31,6 @@ export const useProfileStore = create<ProfileState>()(
         try {
           await updateUserProfile(data);
 
-          // Update local state
           const currentProfile = set((state) => ({
             userProfile: state.userProfile
               ? { ...state.userProfile, ...data }

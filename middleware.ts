@@ -56,21 +56,18 @@ export async function middleware(request: NextRequest) {
     if (process.env.NODE_ENV === 'production') {
       response.headers.set(
         'Content-Security-Policy',
-        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co;"
+        "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.supabase.co;",
       );
     }
 
     return response;
   } catch (error) {
-    console.error('Middleware error:', error);
-    
-    // Return a safe response with security headers even on error
     const errorResponse = NextResponse.next({ request });
     const securityHeaders = getSecurityHeaders();
     Object.entries(securityHeaders).forEach(([key, value]) => {
       errorResponse.headers.set(key, value);
     });
-    
+
     return errorResponse;
   }
 }

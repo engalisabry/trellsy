@@ -1,7 +1,7 @@
 import type { UserProfile } from '@/types';
 import { toast } from 'sonner';
-import { handleApiError, withSupabase } from './api';
-import { getCurrentUser } from './auth.service';
+import { handleError } from '../error-handling';
+import { withSupabase } from './api';
 
 /**
  * Fetches the current user's profile
@@ -10,7 +10,11 @@ export const fetchUserProfile = async () => {
   return withSupabase(async (supabase, userId) => {
     try {
       if (!userId) {
-        throw new Error('No authenticated user found');
+        handleError('auth', {
+          defaultMessage: 'No authenticated user found',
+          showToast: true,
+        });
+        return false;
       }
 
       const { data, error } = await supabase
@@ -35,7 +39,11 @@ export const fetchUserProfile = async () => {
 
       return profile;
     } catch (error) {
-      throw handleApiError(error, 'Failed to fetch user profile');
+      handleError('unknown', {
+        defaultMessage: 'Failed to fetch user profile',
+        showToast: true,
+      });
+      return false;
     }
   });
 };
@@ -65,7 +73,11 @@ export const updateUserProfile = async (data: Partial<UserProfile>) => {
       toast.success('Profile updated successfully');
       return true;
     } catch (error) {
-      throw handleApiError(error, 'Failed to update profile');
+      handleError('unknown', {
+        defaultMessage: 'Failed to update profile',
+        showToast: true,
+      });
+      return false;
     }
   });
 };

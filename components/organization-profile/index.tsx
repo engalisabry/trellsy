@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { handleApiError } from '@/lib/services/api';
+import { handleError } from '@/lib/error-handling';
 import { useOrganizationStore } from '@/lib/stores';
 import { Invitations } from './invitation';
 import { Members } from './members';
@@ -77,7 +77,10 @@ export const OrganizationProfile = () => {
       setInviteEmail('');
       setInviteRole('member');
     } catch (error) {
-      handleApiError(error, 'Failed to send invitation');
+      handleError('unknown', {
+        defaultMessage: 'Failed to sent invitation',
+        showToast: true,
+      });
     } finally {
       setInviteLoading(false);
     }
@@ -88,7 +91,10 @@ export const OrganizationProfile = () => {
       await resendInvitation(invitationId);
       toast.success('Invitation resent!');
     } catch (error) {
-      handleApiError(error, 'Failed to resend invitation');
+      handleError('unknown', {
+        defaultMessage: 'Failed to resend invitation',
+        showToast: true,
+      });
     }
   };
 
@@ -97,7 +103,10 @@ export const OrganizationProfile = () => {
       await revokeInvitation(invitationId);
       toast.success('Invitation revoked!');
     } catch (error) {
-      handleApiError(error, 'Failed to revoke invitation');
+      handleError('unknown', {
+        defaultMessage: 'Failed to revoke invitation',
+        showToast: true,
+      });
     }
   };
 
