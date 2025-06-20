@@ -3,13 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "prisma generate && next dev",
+    "dev:safe": "NODE_OPTIONS='--max-old-space-size=4096' prisma generate && next dev",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "format:fix": "prettier --write app/**/*.{ts,tsx,css} --config .prettierrc"
+    "format:fix": "prettier --write app/**/*.{ts,tsx,css} --config .prettierrc",
+    "db:check": "tsx scripts/check-db.ts",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio",
+    "db:init": "tsx scripts/init-db.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { handleError } from '@/lib/error-handling';
+import { OrganizationProfile } from '@/components/organization-profile';
+import { handleError } from '@/lib/utils/error-handling';
 import { useOrganizationStore } from '@/lib/stores';
 import { createClient } from '@/lib/supabase/client';
 
@@ -20,36 +21,22 @@ const OrganizationPage = () => {
     const checkAuth = async () => {
       try {
         const supabase = createClient();
-        const urlParams = new URLSearchParams(window.location.search);
-        const isFromOAuth = urlParams.has('t');
 
-        if (isFromOAuth) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-
-          await supabase.auth.refreshSession();
-        }
-
-        const { data: sessionData } = await supabase.auth.getSession();
-        const { data: userData } = await supabase.auth.getUser();
+        // Use getUser() for secure authentication (no need for session)
+        const { data: userData, error: userError } =
+          await supabase.auth.getUser();
 
         const debugInfo = {
-          hasSession: !!sessionData.session,
           hasUser: !!userData.user,
-          sessionUserId: sessionData.session?.user?.id,
-          userDataId: userData.user?.id,
-          sessionExpiry: sessionData.session?.expires_at,
-          cookies: document.cookie,
-          isFromOAuth,
-          error:
-            (sessionData as any).error?.message ||
-            (userData as any).error?.message ||
-            null,
+          userId: userData.user?.id,
+          email: userData.user?.email,
+          error: userError?.message || null,
         };
 
         setAuthDebug(debugInfo);
 
-        if (sessionData.session) {
-          setUser(sessionData.session.user);
+        if (userData.user && !userError) {
+          setUser(userData.user);
 
           try {
             await fetchOrganizations();
@@ -57,8 +44,9 @@ const OrganizationPage = () => {
             handleError('auth');
             return false;
           }
-        } else if (isFromOAuth) {
-          setTimeout(checkAuth, 2000);
+        } else {
+          // Redirect to login if no valid user
+          window.location.href = '/auth/login';
           return;
         }
 
@@ -81,46 +69,48 @@ const OrganizationPage = () => {
     );
   }
 
-  return (
-    <div className='p-4'>
-      <h1 className='text-2xl font-bold'>
-        Organization Dashboard - Debug Mode
-      </h1>
+  return <OrganizationProfile />;
 
-      <div className='mt-4 rounded bg-gray-100 p-4'>
-        <h2 className='mb-2 font-bold'>Auth Debug Info:</h2>
-        <pre className='text-xs'>{JSON.stringify(authDebug, null, 2)}</pre>
-      </div>
+  // return (
+  //   <div className='p-4'>
+  //     <h1 className='text-2xl font-bold'>
+  //       Organization Dashboard - Debug Mode
+  //     </h1>
 
-      {user ? (
-        <div className='mt-4'>
-          <p className='mt-2'>Welcome, {user.email}</p>
-          <p>User ID: {user.id}</p>
+  //     <div className='mt-4 rounded bg-gray-100 p-4'>
+  //       <h2 className='mb-2 font-bold'>Auth Debug Info:</h2>
+  //       <pre className='text-xs'>{JSON.stringify(authDebug, null, 2)}</pre>
+  //     </div>
 
-          <div className='mt-4 rounded bg-blue-100 p-4'>
-            <h3 className='mb-2 font-bold'>Organizations:</h3>
-            {orgError ? (
-              <p className='text-red-600'>Error: {orgError.message}</p>
-            ) : (
-              <pre className='text-xs'>
-                {JSON.stringify(organizations, null, 2)}
-              </pre>
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className='mt-4'>
-          <p>Not authenticated</p>
-          <a
-            href='/auth/login'
-            className='mt-4 text-blue-500 underline'
-          >
-            Go to Login
-          </a>
-        </div>
-      )}
-    </div>
-  );
+  //     {user ? (
+  //       <div className='mt-4'>
+  //         <p className='mt-2'>Welcome, {user.email}</p>
+  //         <p>User ID: {user.id}</p>
+
+  //         <div className='mt-4 rounded bg-blue-100 p-4'>
+  //           <h3 className='mb-2 font-bold'>Organizations:</h3>
+  //           {orgError ? (
+  //             <p className='text-red-600'>Error: {orgError.message}</p>
+  //           ) : (
+  //             <pre className='text-xs'>
+  //               {JSON.stringify(organizations, null, 2)}
+  //             </pre>
+  //           )}
+  //         </div>
+  //       </div>
+  //     ) : (
+  //       <div className='mt-4'>
+  //         <p>Not authenticated</p>
+  //         <a
+  //           href='/auth/login'
+  //           className='mt-4 text-blue-500 underline'
+  //         >
+  //           Go to Login
+  //         </a>
+  //       </div>
+  //     )}
+  //   </div>
+  // );
 };
 
 export default OrganizationPage;

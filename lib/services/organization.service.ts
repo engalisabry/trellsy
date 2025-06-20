@@ -1,181 +1,216 @@
 import type {
-  Organization,
+  // Organization,
   OrganizationCreateInput,
   OrganizationInvitation,
-  OrganizationMember,
+  // OrganizationInviteInput,
+  // OrganizationMember,
+  OrganizationRole,
+  OrganizationUpdateInput,
+  PrismaOrganization,
+  PrismaOrganizationMember,
 } from '@/types';
-import { handleError } from '@/lib/error-handling';
-import { withSupabase } from './api';
+import {
+  organizationCreateSchema,
+  organizationInviteSchema,
+  // organizationRoleSchema,
+  // organizationUpdateSchema,
+} from '@/types';
+import { withAuth } from '@/lib/auth/middleware';
+import { handleError } from '@/lib/utils/error-handling';
+import { PrismaClient } from '@/lib/generated/prisma';
+import { db } from '@/lib/utils/db';
 import { uploadFile } from './file-upload.service';
 
-/**
- * Creates a new organization with validation
- */
+type TransactionClient = Omit<
+  PrismaClient,
+  '$connect' | '$disconnect' | '$on' | '$transaction' | '$use'
+>;
+
+const ERROR_MESSAGES = {
+  AUTH_REQUIRED: 'Authentication required',
+  ORG_NOT_FOUND: 'Organization not found',
+  NO_PERMISSION: 'You do not have permission to perform this action',
+  INVALID_INPUT: 'Invalid input provided',
+  SLUG_EXISTS: 'An organization with this slug already exists',
+} as const;
+
+const validateOrganizationInput = (input: OrganizationCreateInput) => {
+  try {
+    return organizationCreateSchema.parse(input);
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(ERROR_MESSAGES.INVALID_INPUT);
+  }
+};
+
+const checkUserPermission = async (
+  prisma: TransactionClient,
+  organizationId: string,
+  userId: string,
+  requiredRole: OrganizationRole = 'member',
+): Promise<boolean> => {
+  const membership = await prisma.organizationMembers.findFirst({
+    where: {
+      organization_id: organizationId,
+      profile_id: userId,
+      role:
+        requiredRole === 'member'
+          ? { in: ['member', 'admin', 'owner'] }
+          : requiredRole === 'admin'
+            ? { in: ['admin', 'owner'] }
+            : 'owner',
+    },
+  });
+  return !!membership;
+};
+
+const handleLogoUpload = async (
+  logo: File | undefined,
+  currentLogoUrl?: string,
+): Promise<string | undefined> => {
+  if (!logo || !(logo instanceof File)) return currentLogoUrl;
+
+  try {
+    const fileUploadResult = await uploadFile(logo, 'organization-logos');
+    return fileUploadResult || currentLogoUrl;
+  } catch (error: unknown) {
+    const errorMessage =
+      error instanceof Error
+        ? error.message
+        : 'Unknown error during logo upload';
+    console.error('Logo upload failed:', errorMessage);
+    return currentLogoUrl;
+  }
+};
+
 export const createOrganization = async (
   props: OrganizationCreateInput & { logo?: File },
-): Promise<Organization | false> => {
-  return withSupabase(async (supabase, userId) => {
+): Promise<PrismaOrganization | null> => {
+  return withAuth(async (userId) => {
     try {
-      if (!userId) {
-        handleError('auth', {
-          showToast: true,
+      validateOrganizationInput(props);
+
+      const slugExists = await db.organization.findUnique({
+        where: { slug: props.slug },
+        select: { id: true },
+      });
+
+      if (slugExists) {
+        throw new Error(ERROR_MESSAGES.SLUG_EXISTS);
+      }
+
+      const logoUrl = await handleLogoUpload(props.logo, props.logo_url);
+
+      return await db.$transaction(async (tx) => {
+        const organization = await tx.organization.create({
+          data: {
+            name: props.name,
+            slug: props.slug,
+            logo_url: logoUrl,
+            created_by: userId,
+          },
         });
-      }
 
-      // Handle logo upload
-      let logo_url = props.logo_url;
-      if (props.logo && props.logo instanceof File) {
-        try {
-          logo_url = await uploadFile(props.logo, 'organization-logos');
-        } catch (error) {
-          handleError('unknown');
-        }
-      }
+        await tx.organizationMembers.create({
+          data: {
+            organization_id: organization.id,
+            profile_id: userId,
+            role: 'admin',
+          },
+        });
 
-      const insertData = {
-        name: props.name,
-        slug: props.slug,
-        created_by: userId.toString(),
-        logo_url,
-      };
-
-      const insertQuery = supabase
-        .from('Organization')
-        .insert(insertData)
-        .select()
-        .single();
-
-      const { data: orgData, error: orgError } = await insertQuery;
-
-      if (orgError) {
-        console.error('Organization creation failed:', orgError);
-        throw new Error(`Failed to create organization: ${orgError.message}`);
-      }
-
-      if (!orgData) {
-        throw new Error('Organization creation returned no data');
-      }
-
-      return orgData;
-    } catch (error) {
+        return organization;
+      });
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to create organization';
       handleError(error, {
-        defaultMessage: 'Failed to create organization',
-        context: { action: 'createOrganization', props },
+        defaultMessage: errorMessage,
+        context: {
+          action: 'createOrganization',
+          props,
+          error: errorMessage,
+        },
         showToast: true,
       });
-      return false;
+      return null;
     }
   });
 };
 
 export const checkSlugAvailability = async (slug: string): Promise<boolean> => {
-  return withSupabase(async (supabase) => {
+  if (!slug?.trim()) {
+    throw new Error(ERROR_MESSAGES.INVALID_INPUT);
+  }
+
+  return withAuth(async () => {
     try {
-      const { data, error } = await supabase
-        .from('Organization')
-        .select('id')
-        .eq('slug', slug)
-        .single();
+      const existingOrg = await db.organization.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
 
-      if (error && error.code !== 'PGRST116') {
-        handleError(error, {
-          defaultMessage: 'Error checking slug availability',
-          showToast: true,
-          context: { action: 'checkSlugAvailability', slug },
-        });
-        return false;
-      }
-
-      return !data;
-    } catch (error) {
+      return !existingOrg;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to check slug availability';
       handleError(error, {
-        defaultMessage: 'Unexpected error checking slug availability',
-        context: { action: 'checkSlugAvailability', slug },
+        defaultMessage: errorMessage,
+        context: {
+          action: 'checkSlugAvailability',
+          slug,
+          error: errorMessage,
+        },
         showToast: true,
-        throwError: true,
       });
       return false;
     }
   });
 };
 
-/**
- * Fetches all organizations for the current user (Server-side)
- * @returns {Promise<{ organizations: Organization[]; memberships: OrganizationMember[] }>}
- */
-export const fetchUserOrganizationsServer = async (): Promise<{
-  organizations: Organization[];
-  memberships: OrganizationMember[];
-}> => {
-  return withSupabase(async (supabase, userId) => {
-    if (!userId) {
-      handleError('auth', {
-        showToast: true,
-      });
-    }
-
-    try {
-      const [orgsResult, membershipsResult] = await Promise.all([
-        supabase.from('Organization').select('*').eq('created_by', userId),
-        supabase
-          .from('OrganizationMembers')
-          .select('*, organization:Organization(*)')
-          .eq('profile_id', userId),
-      ]);
-
-      if (orgsResult.error) throw orgsResult.error;
-      if (membershipsResult.error) throw membershipsResult.error;
-
-      const organizations = orgsResult.data || [];
-      const memberships = membershipsResult.data || [];
-
-      return { organizations, memberships };
-    } catch (error) {
-      handleError(error, {
-        defaultMessage: 'Failed to fetch organizations',
-        context: { action: 'fetchUserOrganizations' },
-        showToast: true,
-      });
-      return { organizations: [], memberships: [] };
-    }
-  });
-};
-
-/**
- * Fetches all organizations for the current user (Client-side)
- * @returns {Promise<{ organizations: Organization[]; memberships: OrganizationMember[] }>}
- */
 export const fetchUserOrganizations = async (): Promise<{
-  organizations: Organization[];
-  memberships: OrganizationMember[];
+  organizations: PrismaOrganization[];
+  memberships: Array<
+    PrismaOrganizationMember & { organization: PrismaOrganization }
+  >;
 }> => {
-  return withSupabase(async (supabase, userId) => {
+  return withAuth(async (userId) => {
     try {
-      if (userId) {
-        handleError('auth', {
-          showToast: true,
-        });
-      }
-
-      const [orgsResult, membershipsResult] = await Promise.all([
-        supabase.from('Organization').select('*').eq('created_by', userId),
-        supabase
-          .from('OrganizationMembers')
-          .select('*, organization:Organization(*)')
-          .eq('profile_id', userId),
+      const [organizations, memberships] = await Promise.all([
+        db.organization.findMany({
+          where: { created_by: userId },
+          orderBy: { created_at: 'desc' },
+        }),
+        db.organizationMembers.findMany({
+          where: {
+            profile_id: userId,
+            organization: { created_by: { not: userId } },
+          },
+          include: {
+            organization: true,
+          },
+          orderBy: { created_at: 'desc' },
+        }),
       ]);
 
-      if (orgsResult.error) throw orgsResult.error;
-      if (membershipsResult.error) throw membershipsResult.error;
-
-      const organizations = orgsResult.data || [];
-      const memberships = membershipsResult.data || [];
-
       return { organizations, memberships };
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to fetch organizations';
       handleError(error, {
-        defaultMessage: 'Failed to fetch organizations',
-        context: { action: 'fetchUserOrganizations' },
+        defaultMessage: errorMessage,
+        context: {
+          action: 'fetchUserOrganizations',
+          error: errorMessage,
+        },
         showToast: true,
       });
       return { organizations: [], memberships: [] };
@@ -183,70 +218,136 @@ export const fetchUserOrganizations = async (): Promise<{
   });
 };
 
-/**
- * Updates an organization
- */
 export const updateOrganization = async (
   id: string,
-  updates: Partial<Organization>,
-) => {
-  return withSupabase(async (supabase, userId) => {
+  updates: OrganizationUpdateInput & {
+    logo?: File;
+  },
+): Promise<PrismaOrganization | null> => {
+  return withAuth(async (userId) => {
     try {
-      const { data, error } = await supabase
-        .from('Organization')
-        .update(updates)
-        .eq('id', id)
-        .eq('created_by', userId)
-        .select()
-        .single();
-
-      if (error) {
-        handleError(error, {
-          defaultMessage: 'Failed to update organization',
-          context: { action: 'updateOrganization', id },
-          showToast: true,
-        });
-        return false;
+      if (!id) {
+        throw new Error('Organization ID is required');
       }
 
-      return data;
-    } catch (error) {
+      const organization = await db.organization.findUnique({
+        where: { id },
+      });
+
+      if (!organization) {
+        throw new Error(ERROR_MESSAGES.ORG_NOT_FOUND);
+      }
+
+      const hasPermission = await checkUserPermission(db, id, userId, 'admin');
+      if (!hasPermission) {
+        throw new Error(ERROR_MESSAGES.NO_PERMISSION);
+      }
+
+      let logoUrl = updates.logo_url;
+      if (updates.logo) {
+        logoUrl = await handleLogoUpload(
+          updates.logo,
+          organization.logo_url || undefined,
+        );
+        const { logo, ...updatesWithoutLogo } = updates;
+        updates = { ...updatesWithoutLogo, logo_url: logoUrl };
+      }
+
+      if (updates.slug && updates.slug !== organization.slug) {
+        const slugAvailable = await checkSlugAvailability(updates.slug);
+        if (!slugAvailable) {
+          throw new Error(ERROR_MESSAGES.SLUG_EXISTS);
+        }
+      }
+
+      return await db.$transaction(async (tx) => {
+        const updated = await tx.organization.update({
+          where: { id },
+          data: {
+            ...updates,
+            updated_at: new Date(),
+          },
+        });
+
+        return updated;
+      });
+    } catch (error: any) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to update organization';
       handleError(error, {
-        defaultMessage: 'Failed to update organization',
-        context: { action: 'updateOrganization', id },
+        defaultMessage: errorMessage,
+        context: {
+          action: 'updateOrganization',
+          id,
+          updates,
+          error: errorMessage,
+        },
         showToast: true,
       });
-      return false;
+      return null;
     }
   });
 };
 
-/**
- * Deletes an organization
- */
-export const deleteOrganization = async (id: string) => {
-  return withSupabase(async (supabase, userId) => {
+export const deleteOrganization = async (id: string): Promise<boolean> => {
+  return withAuth(async (userId) => {
     try {
-      const { error } = await supabase
-        .from('Organization')
-        .delete()
-        .eq('id', id)
-        .eq('created_by', userId);
-
-      if (error) {
-        handleError(error, {
-          defaultMessage: 'Failed to delete organization',
-          context: { action: 'deleteOrganization', id },
-          showToast: true,
-        });
-        return false;
+      if (!id) {
+        throw new Error('Organization ID is required');
       }
 
+      const organization = await db.organization.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: {
+              members: true,
+              Board: true,
+              OrganizationInvitation: true,
+            },
+          },
+        },
+      });
+
+      if (!organization) {
+        throw new Error(ERROR_MESSAGES.ORG_NOT_FOUND);
+      }
+
+      if (organization.created_by !== userId) {
+        throw new Error(ERROR_MESSAGES.NO_PERMISSION);
+      }
+
+      await db.$transaction([
+        db.organizationMembers.deleteMany({
+          where: { organization_id: id },
+        }),
+        // Delete all organization invitations
+        db.organizationInvitation.deleteMany({
+          where: { organization_id: id },
+        }),
+        // Delete all organization boards and their related data
+        db.board.deleteMany({
+          where: { organization_id: id },
+        }),
+        // Finally, delete the organization itself
+        db.organization.delete({
+          where: { id },
+        }),
+      ]);
+
       return true;
-    } catch (error) {
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'An unknown error occurred';
       handleError(error, {
         defaultMessage: 'Failed to delete organization',
-        context: { action: 'deleteOrganization', id },
+        context: {
+          action: 'deleteOrganization',
+          id,
+          error: errorMessage,
+        },
         showToast: true,
       });
       return false;
@@ -258,44 +359,63 @@ export const deleteOrganization = async (id: string) => {
  * Organization Invitations
  */
 
-// Invite a user to an organization
 export const inviteToOrganization = async (
   organization_id: string,
   email: string,
-  role: string = 'member',
+  role: OrganizationRole = 'member',
 ) => {
-  return withSupabase(async (supabase, userId) => {
+  try {
+    organizationInviteSchema.parse({ organization_id, email, role });
+  } catch (error) {
+    if (error instanceof Error) {
+      handleError(error, {
+        defaultMessage: ERROR_MESSAGES.INVALID_INPUT,
+        context: {
+          action: 'inviteToOrganization',
+          input: { organization_id, email, role },
+        },
+        showToast: true,
+      });
+      return false;
+    }
+  }
+  return withAuth(async (userId) => {
     try {
-      // Generate a unique token for the invitation
-      const token = crypto.randomUUID();
-
-      const { data, error } = await supabase
-        .from('OrganizationInvitations')
-        .insert({
-          organization_id,
-          email,
-          role,
-          invited_by: userId,
-          status: 'pending',
-          token,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        handleError(error, {
-          defaultMessage: 'Failed to create organization invitation',
-          context: { action: 'inviteToOrganization', organization_id, email },
+      if (!userId) {
+        handleError('auth', {
           showToast: true,
         });
         return false;
       }
 
-      return data as OrganizationInvitation;
-    } catch (error) {
+      const token = crypto.randomUUID();
+
+      // Using Prisma instead of Supabase
+      const invitation = await db.organizationInvitation.create({
+        data: {
+          organization_id,
+          email,
+          role,
+          invited_by: userId.toString(),
+          status: 'pending',
+          token,
+        },
+      });
+
+      return invitation as OrganizationInvitation;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error
+          ? error.message
+          : 'Failed to create organization invitation';
       handleError(error, {
-        defaultMessage: 'Failed to create organization invitation',
-        context: { action: 'inviteToOrganization', organization_id, email },
+        defaultMessage: errorMessage,
+        context: {
+          action: 'inviteToOrganization',
+          organization_id,
+          email,
+          error: errorMessage,
+        },
         showToast: true,
       });
       return false;
@@ -303,68 +423,54 @@ export const inviteToOrganization = async (
   });
 };
 
-// List all invitations for an organization
 export const listOrganizationInvitations = async (organization_id: string) => {
-  return withSupabase(async (supabase) => {
+  return withAuth(async (userId) => {
     try {
-      const { data, error } = await supabase
-        .from('OrganizationInvitations')
-        .select('*')
-        .eq('organization_id', organization_id)
-        .order('created_at', { ascending: false });
+      // Using Prisma instead of Supabase
+      const invitations = await db.organizationInvitation.findMany({
+        where: { organization_id },
+        orderBy: { created_at: 'desc' },
+      });
 
-      if (error) {
-        handleError(error, {
-          defaultMessage: "Can't get invitations list",
-          context: { action: 'listOrganizationInvitations', organization_id },
-          showToast: true,
-        });
-        return error;
-      }
-
-      return (Array.isArray(data) ? data : []) as OrganizationInvitation[];
+      return invitations as OrganizationInvitation[];
     } catch (error) {
       handleError(error, {
         defaultMessage: 'Failed to get invitations list',
         context: { action: 'listOrganizationInvitations', organization_id },
         showToast: true,
       });
-      return false;
+      return [] as OrganizationInvitation[];
     }
   });
 };
 
-// Resend invitation (regenerate token, set status to pending, clear accepted/revoked)
 export const resendOrganizationInvitation = async (invitation_id: string) => {
-  return withSupabase(async (supabase) => {
+  return withAuth(async (userId) => {
     try {
       const token = crypto.randomUUID();
-      const { data, error } = await supabase
-        .from('OrganizationInvitations')
-        .update({
+
+      // Using Prisma instead of Supabase
+      const invitation = await db.organizationInvitation.update({
+        where: { id: invitation_id },
+        data: {
           token,
           status: 'pending',
           accepted_at: null,
           revoked_at: null,
-        })
-        .eq('id', invitation_id)
-        .select()
-        .single();
+        },
+      });
 
-      if (error) {
-        handleError(error, {
-          defaultMessage: 'Failed to resend invitation',
-          context: { action: 'resendOrganizationInvitation', invitation_id },
-          showToast: true,
-        });
-        return false;
-      }
-
-      return data as OrganizationInvitation;
-    } catch (error) {
+      return invitation as OrganizationInvitation;
+    } catch (error: unknown) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to resend invitation';
       handleError(error, {
-        defaultMessage: 'Failed to resend invitation',
-        context: { action: 'resendOrganizationInvitation', invitation_id },
+        defaultMessage: errorMessage,
+        context: {
+          action: 'resendOrganizationInvitation',
+          invitation_id,
+          error: errorMessage,
+        },
         showToast: true,
       });
       return false;
@@ -372,30 +478,19 @@ export const resendOrganizationInvitation = async (invitation_id: string) => {
   });
 };
 
-// Revoke invitation
 export const revokeOrganizationInvitation = async (invitation_id: string) => {
-  return withSupabase(async (supabase) => {
+  return withAuth(async (userId) => {
     try {
-      const { data, error } = await supabase
-        .from('OrganizationInvitations')
-        .update({
+      // Using Prisma instead of Supabase
+      const invitation = await db.organizationInvitation.update({
+        where: { id: invitation_id },
+        data: {
           status: 'revoked',
-          revoked_at: new Date().toISOString(),
-        })
-        .eq('id', invitation_id)
-        .select()
-        .single();
+          revoked_at: new Date(),
+        },
+      });
 
-      if (error) {
-        handleError(error, {
-          defaultMessage: 'Failed to revoke invitation',
-          context: { action: 'revokeOrganizationInvitation', invitation_id },
-          showToast: true,
-        });
-        return false;
-      }
-
-      return data as OrganizationInvitation;
+      return invitation as OrganizationInvitation;
     } catch (error) {
       handleError(error, {
         defaultMessage: 'Failed to revoke invitation',
@@ -407,22 +502,22 @@ export const revokeOrganizationInvitation = async (invitation_id: string) => {
   });
 };
 
-// Accept invitation by token
 export const acceptOrganizationInvitation = async (
   token: string,
   profile_id: string,
 ) => {
-  return withSupabase(async (supabase) => {
+  return withAuth(async (userId) => {
     try {
-      const { data: invite, error: inviteError } = await supabase
-        .from('OrganizationInvitations')
-        .select('*')
-        .eq('token', token)
-        .eq('status', 'pending')
-        .single();
+      // Using Prisma instead of Supabase
+      const invite = await db.organizationInvitation.findFirst({
+        where: {
+          token,
+          status: 'pending',
+        },
+      });
 
-      if (inviteError || !invite) {
-        handleError(inviteError, {
+      if (!invite) {
+        handleError(new Error('Invitation not found'), {
           defaultMessage: "Can't find invitation",
           context: { action: 'acceptOrganizationInvitation', token },
           showToast: true,
@@ -430,57 +525,52 @@ export const acceptOrganizationInvitation = async (
         return false;
       }
 
-      // Add the user as a member
-      const { error: memberError } = await supabase
-        .from('OrganizationMembers')
-        .insert({
-          organization_id: invite.organization_id,
-          profile_id,
-          role: invite.role,
-        });
-
-      if (memberError) {
-        handleError(memberError, {
-          defaultMessage: 'Failed to add user as organization member',
-          context: {
-            action: 'acceptOrganizationInvitation',
-            token,
+      return await db.$transaction(async (tx) => {
+        await tx.organizationMembers.create({
+          data: {
+            organization_id: invite.organization_id,
             profile_id,
+            role: invite.role,
           },
-          showToast: true,
         });
-        return false;
-      }
 
-      // Mark invitation as accepted
-      const { error: updateError } = await supabase
-        .from('OrganizationInvitations')
-        .update({
-          status: 'accepted',
-          accepted_at: new Date().toISOString(),
-        })
-        .eq('id', invite.id);
-
-      if (updateError) {
-        handleError(updateError, {
-          defaultMessage: 'Failed to update status of invitation',
-          context: {
-            action: 'acceptOrganizationInvitation',
-            token,
-            profile_id,
+        await tx.organizationInvitation.update({
+          where: { id: invite.id },
+          data: {
+            status: 'accepted',
+            accepted_at: new Date(),
           },
-          showToast: true,
         });
-        return false;
-      }
 
-      return true;
-    } catch (error) {
-      handleError(error, {
-        defaultMessage: 'Failed to accept invitation',
-        context: { action: 'acceptOrganizationInvitation', token, profile_id },
-        showToast: true,
+        return true;
       });
+    } catch (error) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === 'P2002'
+      ) {
+        handleError(error, {
+          defaultMessage: 'You are already a member of this organization',
+          context: {
+            action: 'acceptOrganizationInvitation',
+            token,
+            profile_id,
+          },
+          showToast: true,
+        });
+      } else {
+        handleError(error, {
+          defaultMessage: 'Failed to accept invitation',
+          context: {
+            action: 'acceptOrganizationInvitation',
+            token,
+            profile_id,
+          },
+          showToast: true,
+        });
+      }
       return false;
     }
   });

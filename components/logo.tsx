@@ -1,7 +1,7 @@
 import localFont from 'next/font/local';
 import Image from 'next/image';
 import Link from 'next/link';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/utils';
 
 const calFontHeading = localFont({
   src: '../public/fonts/CalSans-SemiBold.woff2',
@@ -22,16 +22,12 @@ export const Logo = () => {
           priority
           className='scale-150'
         />
-        <p className={cn('pb-1 text-lg', calFontHeading.className)}>Trellsy</p>
-        <div className='overflow-hidden rounded-4xl bg-white p-3'>
-          <Image
-            src='/work-in-progress.png'
-            alt='beta_logo'
-            width={35}
-            height={35}
-            priority
-          />
-        </div>
+        <p className={cn('relative pb-1 text-lg', calFontHeading.className)}>
+          Trellsy
+          <span className='absolute right-0 -bottom-1.5 text-xs text-gray-500'>
+            BETA
+          </span>
+        </p>
       </Link>
     </div>
   );

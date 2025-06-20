@@ -2,12 +2,12 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 import {
-  checkSlugAvailability,
-  createOrganization,
-} from '@/lib/services/organization.service';
-import { slugify } from '@/lib/utils';
+  checkSlugAvailabilityAction,
+  createOrganizationAction,
+} from '@/actions/organization';
+import { toast } from 'sonner';
+import { slugify } from '@/lib/utils/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -19,24 +19,31 @@ export function CreateOrganizationForm() {
   const [slug, setSlug] = useState('');
   const [logo, setLogo] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [isSlugAvailable, setIsSlugAvailable] = useState<boolean | null>(null);
+  const [isSlugAvailable, setIsSlugAvailable] = useState<boolean | undefined>(
+    undefined,
+  );
   const [isCheckingSlug, setIsCheckingSlug] = useState(false);
 
   // Check slug availability when it changes
   useEffect(() => {
     const checkSlug = async () => {
       if (!slug || slug.length < 3) {
-        setIsSlugAvailable(null);
+        setIsSlugAvailable(undefined);
         return;
       }
 
       setIsCheckingSlug(true);
       try {
-        const isAvailable = await checkSlugAvailability(slug);
-        setIsSlugAvailable(isAvailable);
+        const result = await checkSlugAvailabilityAction(slug);
+        if (result.success) {
+          setIsSlugAvailable(result.available);
+        } else {
+          console.error('Error checking slug availability:', result.error);
+          setIsSlugAvailable(undefined);
+        }
       } catch (error) {
         console.error('Error checking slug availability:', error);
-        setIsSlugAvailable(null);
+        setIsSlugAvailable(undefined);
       } finally {
         setIsCheckingSlug(false);
       }
@@ -69,17 +76,28 @@ export function CreateOrganizationForm() {
     }
 
     try {
-      await createOrganization({
-        name: name.trim(),
-        slug: slug.trim(),
-        logo: logo ?? undefined,
-      });
+      const formData = new FormData();
+      formData.append('name', name.trim());
+      formData.append('slug', slug.trim());
+      if (logo) {
+        formData.append('logo', logo);
+      }
 
-      toast.success(`Organization "${name}" created successfully!`);
-      router.push('/organization');
+      const result = await createOrganizationAction(formData);
+
+      if (result.success) {
+        toast.success(`Organization "${name}" created successfully!`);
+        router.push('/organization');
+      } else {
+        toast.error(
+          result.error || 'Failed to create organization. Please try again.',
+        );
+      }
     } catch (error) {
-      toast.error('Failed to create organization');
-      console.error(error);
+      console.error('Create organization error:', error);
+      toast.error(
+        'Failed to create organization. Please check your input and try again.',
+      );
     } finally {
       setLoading(false);
     }

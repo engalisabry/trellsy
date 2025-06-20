@@ -1,20 +1,39 @@
 import { redirect } from 'next/navigation';
 import { CreateOrganizationForm } from '@/components/create-organization-form';
-import { createServerSupabaseClient, getSession } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 export default async function CreateOrganizationPage() {
-  const session = await getSession();
-  if (!session) redirect('/auth/login');
+  const supabase = await createClient();
+  
+  // Use getUser() for secure authentication
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+  
+  if (userError || !user) {
+    redirect('/auth/login');
+  }
 
-  const supabase = await createServerSupabaseClient();
+  // Check if user already has organizations (both membership and created)
+  const [membershipCheck, createdOrgCheck] = await Promise.all([
+    supabase
+      .from('OrganizationMembers')
+      .select('organization_id')
+      .eq('profile_id', user.id)
+      .limit(1),
+    supabase
+      .from('Organization')
+      .select('id')
+      .eq('created_by', user.id)
+      .limit(1)
+  ]);
 
-  // Check if user already has organizations
-  const { data: organizations } = await supabase
-    .from('OrganizationMembers')
-    .select('organization_id')
-    .eq('profile_id', session.user.id);
+  const hasOrganizations = 
+    (membershipCheck.data && membershipCheck.data.length > 0) ||
+    (createdOrgCheck.data && createdOrgCheck.data.length > 0);
 
-  if (organizations?.length) {
+  if (hasOrganizations) {
     redirect('/organization');
   }
 

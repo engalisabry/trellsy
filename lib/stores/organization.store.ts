@@ -4,13 +4,16 @@ import type {
   OrganizationInvitation,
   OrganizationState,
   OrganizationMember,
+  OrganizationRole,
 } from '@/types';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import {
-  createOrganization as createOrg,
+  fetchUserOrganizationsAction,
+  createOrganizationAction,
+} from '@/actions/organization';
+import {
   deleteOrganization as deleteOrg,
-  fetchUserOrganizations,
   inviteToOrganization,
   listOrganizationInvitations,
   resendOrganizationInvitation,
@@ -22,7 +25,7 @@ interface OrganizationStore extends OrganizationState {
   invitations: OrganizationInvitation[];
   currentOrganization: Organization | null;
   fetchInvitations: (organization_id: string) => Promise<void>;
-  inviteMember: (organization_id: string, email: string, role?: string) => Promise<void>;
+  inviteMember: (organization_id: string, email: string, role?: OrganizationRole) => Promise<void>;
   resendInvitation: (invitation_id: string) => Promise<void>;
   revokeInvitation: (invitation_id: string) => Promise<void>;
   setCurrentOrganization: (slug: string) => void;
@@ -44,22 +47,30 @@ export const useOrganizationStore = create<OrganizationStore>()(
       fetchOrganizations: async () => {
         set({ isLoading: true, error: null });
         try {
-          const result = await fetchUserOrganizations();
-          if (!result) throw new Error('Failed to fetch organizations');
+          const result = await fetchUserOrganizationsAction();
+          if (!result.success) throw new Error(result.error || 'Failed to fetch organizations');
           
           const { organizations, memberships } = result;
           if (!Array.isArray(organizations)) throw new Error('Invalid organizations data');
           
+          // Ensure memberships is always an array and cast roles to OrganizationRole
+          const membershipArray = Array.isArray(memberships) 
+            ? memberships.map(m => ({
+                ...m,
+                role: m.role as OrganizationRole
+              }))
+            : [];
+          
           set({ 
             organizations, 
-            memberships, 
+            memberships: membershipArray, 
             isSuccess: true,
             // Update current organization if it no longer exists
             currentOrganization: get().currentOrganization 
               ? organizations.find(o => o.id === get().currentOrganization?.id) || null
               : null
           });
-          return { organizations, memberships };
+          return { organizations, memberships: membershipArray };
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
           return { organizations: [], memberships: [] };
@@ -71,11 +82,22 @@ export const useOrganizationStore = create<OrganizationStore>()(
       createOrganization: async (props: OrganizationCreateInput) => {
         set({ isLoading: true, error: null });
         try {
-          await createOrg(props);
+          const formData = new FormData();
+          formData.append('name', props.name);
+          formData.append('slug', props.slug);
+          if (props.logo) {
+            formData.append('logo', props.logo);
+          }
+          
+          const result = await createOrganizationAction(formData);
+          if (!result.success) {
+            throw new Error(result.error || 'Failed to create organization');
+          }
+          
           const { organizations } = await get().fetchOrganizations();
           set({ isSuccess: true });
           // Return the newly created organization
-          return organizations.find(org => org.name === props.name) || false;
+          return result.organization || false;
         } catch (error) {
           set({ error: error as Error, isSuccess: false });
           return false;
@@ -149,7 +171,7 @@ export const useOrganizationStore = create<OrganizationStore>()(
         }
       },
 
-      inviteMember: async (organization_id, email, role = 'member') => {
+      inviteMember: async (organization_id, email, role: OrganizationRole = 'member') => {
         set({ isLoading: true, error: null });
         try {
           await inviteToOrganization(organization_id, email, role);

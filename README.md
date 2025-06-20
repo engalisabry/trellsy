@@ -52,7 +52,7 @@ authentication, organization management, and real-time collaboration features. I
 - **Styling:** Tailwind CSS, tw-animate-css
 - **UI Components:** Radix UI, Lucide React
 - **State Management:** Zustand, React Query
-- **Backend:** Supabase (auth & database)
+- **Backend:** Supabase (auth), Prisma (database ORM)
 - **Utilities:** Axios, clsx, class-variance-authority
 - **Tooling:** ESLint, Prettier, TypeScript
 

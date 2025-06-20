@@ -1,6 +1,5 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@supabase/ssr';
-import { handleError } from '../error-handling';
 
 /**
  * Middleware for authentication and redirects
@@ -30,11 +29,15 @@ export async function updateSession(request: NextRequest) {
       },
     );
 
-    // Get current session without forcing refresh
+    // Get authenticated user (more secure than getSession)
     const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    const user = session?.user;
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError) {
+      console.error('Auth error in middleware:', userError);
+    }
 
     // Define public routes
     const publicRoutes = [
@@ -55,8 +58,8 @@ export async function updateSession(request: NextRequest) {
         request.nextUrl.pathname,
       );
 
-    // Handle auth callback with timestamp (post-login)
-    if (request.nextUrl.searchParams.has('t')) {
+    // Handle auth callback
+    if (request.nextUrl.pathname.includes('/auth/callback')) {
       return response;
     }
 
@@ -79,7 +82,7 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // Handle organization routing for authenticated users
+// Handle organization routing for authenticated users
     if (
       user &&
       (request.nextUrl.pathname === '/' ||
@@ -89,13 +92,24 @@ export async function updateSession(request: NextRequest) {
     ) {
       // Check user organizations (with error handling)
       try {
-        const { data: organizations } = await supabase
-          .from('OrganizationMembers')
-          .select('organization_id')
-          .eq('profile_id', user.id)
-          .limit(1);
+        // Use Supabase for middleware since Prisma can't run in edge runtime
+        // Note: We need to keep using Supabase data API here since Edge runtime doesn't support Prisma
+        const [membershipCheck, createdOrgCheck] = await Promise.all([
+          supabase
+            .from('OrganizationMembers')
+            .select('organization_id')
+            .eq('profile_id', user.id)
+            .limit(1),
+          supabase
+            .from('Organization')
+            .select('id')
+            .eq('created_by', user.id)
+            .limit(1)
+        ]);
 
-        const hasOrganizations = organizations && organizations.length > 0;
+        const hasOrganizations = 
+          (membershipCheck.data && membershipCheck.data.length > 0) ||
+          (createdOrgCheck.data && createdOrgCheck.data.length > 0);
 
         // Redirect to create organization if none exist
         if (
@@ -119,14 +133,14 @@ export async function updateSession(request: NextRequest) {
         }
       } catch (error) {
         console.error('Organization check failed:', error);
-        handleError('', {
-          defaultMessage: '',
-        });
+        // Continue with the request even if organization check fails
+        return response;
       }
     }
 
     return response;
   } catch (error) {
+    console.error('Session update error:', error);
     return NextResponse.next({ request });
   }
 }
