@@ -2,26 +2,31 @@
 
 import { useState } from 'react';
 import { LoaderCircle } from 'lucide-react';
-import { useAuthStore } from '@/lib/stores';
+import { handleError } from '@/lib/utils/error-handling';
+import { useAuth } from '@/hooks/use-auth';
 import { Button } from './ui/button';
 
 export const GoogleButton = () => {
-  const { loginWithGoogle } = useAuthStore();
+  const auth = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleGoogleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      await loginWithGoogle();
+      await auth.signInWithGoogle();
+    } catch (error) {
+      handleError(error, {
+        showToast: true,
+        context: {
+          action: 'auth',
+          error,
+        },
+      });
     } finally {
       setIsLoading(false);
     }
   };
-
-  // if (isSuccess) {
-  //   router.push('/organization');
-  // }
 
   return (
     <div className='flex justify-center'>
@@ -31,6 +36,7 @@ export const GoogleButton = () => {
         size='sm'
         className='inline-flex w-full justify-center'
         onClick={handleGoogleSignIn}
+        aria-label='Sign in with Google'
       >
         {isLoading ? (
           <LoaderCircle className='h-4 w-4 animate-spin' />
@@ -39,6 +45,7 @@ export const GoogleButton = () => {
             <svg
               className='mr-2 h-4 w-4'
               viewBox='0 0 24 24'
+              aria-hidden='true'
             >
               <path
                 d='M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z'
@@ -61,7 +68,7 @@ export const GoogleButton = () => {
                 fill='none'
               />
             </svg>
-            Google
+            Sign in with Google
           </>
         )}
       </Button>

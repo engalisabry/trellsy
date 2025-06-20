@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { GoogleButton } from '@/components/google-button';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -12,40 +14,44 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuthStore } from '@/lib/stores';
-import { useAuth } from '@/lib/hooks/use-auth';
-import { cn } from '@/lib/utils';
-import { GoogleButton } from './google-button';
+import { handleError } from '@/lib/utils/error-handling';
+import { useAuth } from '@/hooks/use-auth';
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<'div'>) {
+export const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [localLoading, setLocalLoading] = useState(false);
-  const { login, isLoading: storeLoading } = useAuthStore();
-
-  const isLoading = localLoading || storeLoading;
+  const [isLoading, setIsLoading] = useState(false);
+  const auth = useAuth();
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isLoading) return;
 
     try {
-      setLocalLoading(true);
-      await login(email, password);
+      setIsLoading(true);
+      const result = await auth.signIn(email, password);
+
+      if (result) {
+        router.push('/organization');
+      }
     } catch (error) {
-      setLocalLoading(false);
-      console.error('Login error:', error);
+      handleError(error, {
+        showToast: true,
+        context: {
+          action: 'auth',
+          email,
+          password,
+          error,
+        },
+      });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div
-      className={cn('flex flex-col gap-6', className)}
-      {...props}
-    >
+    <div className='flex flex-col gap-6'>
       <Card>
         <CardHeader>
           <CardTitle className='text-2xl'>Login</CardTitle>
@@ -58,6 +64,7 @@ export function LoginForm({
           <div className='mb-6'>
             <GoogleButton />
           </div>
+          {/* Login Form */}
           <form onSubmit={handleLogin}>
             <div className='flex flex-col gap-6'>
               <div className='grid gap-2'>
@@ -114,4 +121,4 @@ export function LoginForm({
       </Card>
     </div>
   );
-}
+};

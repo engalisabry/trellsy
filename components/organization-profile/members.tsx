@@ -16,14 +16,14 @@ export const Members = ({ members }: { members: OrganizationMember[] }) => (
             <Avatar className='h-8 w-8'>
               <AvatarImage
                 src={member.avatar_url || ''}
-                alt={member.user_id}
+                alt={member.profile_id || 'Member'}
               />
               <AvatarFallback>
-                {member.user_id?.charAt(0).toUpperCase()}
+                {member.profile_id?.charAt(0).toUpperCase()}
               </AvatarFallback>
             </Avatar>
             <div>
-              <div className='font-medium'>{member.user_id}</div>
+              <div className='font-medium'>{member.profile_id}</div>
               <div className='text-muted-foreground text-xs'>
                 Role: {member.role}
               </div>

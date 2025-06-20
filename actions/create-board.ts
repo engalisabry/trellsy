@@ -1,7 +1,8 @@
 'use server';
 
 import { z } from 'zod';
-import { db } from '@/lib/db';
+import { createBoard } from '@/lib/services/board.service';
+import { revalidatePath } from 'next/cache';
 
 const CreateBoard = z.object({
   title: z.string(),
@@ -9,21 +10,24 @@ const CreateBoard = z.object({
 });
 
 export async function create(formData: FormData) {
-  const { title, organizationId } = CreateBoard.parse({
-    title: formData.get('title'),
-    organizationId: formData.get('organizationId')
-  });
+  try {
+    const { title, organizationId } = CreateBoard.parse({
+      title: formData.get('title'),
+      organizationId: formData.get('organizationId')
+    });
 
-  await db.board.create({
-    data: {
-      title,
-      organization: {
-        connect: {
-          id: organizationId
-        }
-      }
+    const result = await createBoard(title, organizationId);
+    
+    if (result) {
+      // Revalidate relevant paths to refresh the UI
+      revalidatePath(`/organization`);
+      revalidatePath(`/organization/${organizationId}`);
+      return { success: true, board: result };
     }
-  });
-
-  return { success: true };
+    
+    return { success: false, error: 'Failed to create board' };
+  } catch (error: any) {
+    console.error('Create board action error:', error);
+    return { success: false, error: error.message || 'Failed to create board' };
+  }
 }

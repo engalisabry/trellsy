@@ -3,7 +3,7 @@ import localFont from 'next/font/local';
 import Link from 'next/link';
 import { Medal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/utils';
 
 const calFontHeading = localFont({
   src: '../../public/fonts/CalSans-SemiBold.woff2',

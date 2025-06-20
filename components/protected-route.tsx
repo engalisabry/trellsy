@@ -2,8 +2,8 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/hooks/use-auth';
 import { LoaderCircle } from 'lucide-react';
+import { useAuth } from '@/hooks/use-auth';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -11,45 +11,30 @@ interface ProtectedRouteProps {
   fallback?: React.ReactNode;
 }
 
-export function ProtectedRoute({ 
-  children, 
+export function ProtectedRoute({
+  children,
   redirectTo = '/auth/login',
-  fallback
+  fallback,
 }: ProtectedRouteProps) {
-  const { user, loading, error } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user && !error) {
+    if (!loading && !user) {
       router.push(redirectTo);
     }
-  }, [user, loading, error, router, redirectTo]);
+  }, [user, loading, router, redirectTo]);
 
   if (loading) {
-    return fallback || (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <LoaderCircle className="h-8 w-8 animate-spin" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="text-sm text-red-500">Authentication Error</p>
-          <p className="text-xs text-muted-foreground">{error}</p>
-          <button 
-            onClick={() => router.push(redirectTo)}
-            className="text-sm underline"
-          >
-            Go to Login
-          </button>
+      fallback || (
+        <div className='flex min-h-screen items-center justify-center'>
+          <div className='flex flex-col items-center gap-4'>
+            <LoaderCircle className='h-8 w-8 animate-spin' />
+            <p className='text-muted-foreground text-sm'>Loading...</p>
+          </div>
         </div>
-      </div>
+      )
     );
   }
 
@@ -63,7 +48,7 @@ export function ProtectedRoute({
 // Higher-order component version
 export function withAuth<P extends object>(
   Component: React.ComponentType<P>,
-  options?: { redirectTo?: string; fallback?: React.ReactNode }
+  options?: { redirectTo?: string; fallback?: React.ReactNode },
 ) {
   return function AuthenticatedComponent(props: P) {
     return (
@@ -73,4 +58,3 @@ export function withAuth<P extends object>(
     );
   };
 }
-

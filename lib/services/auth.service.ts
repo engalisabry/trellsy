@@ -1,164 +1,91 @@
-import { toast } from 'sonner';
-import { handleError } from '../error-handling';
-import { withSupabase } from './api';
+/**
+ * Simplified auth service - only user sync utilities
+ * All auth actions moved to /lib/auth/actions.ts
+ */
+import { createClient } from '@/lib/supabase/server';
+import { db } from '@/lib/utils/db';
+
+// Re-export auth actions for backward compatibility
+export { signupWithEmailPassword, resendVerificationEmail } from '@/lib/auth/actions';
 
 /**
- * Handles email/password Signup
- * This function is designed for client-side usage
+ * Get current server user - used in middleware
  */
-export const signupWithEmailPassword = async (
-  email: string,
-  password: string,
+export const getCurrentServerUser = async () => {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      return null;
+    }
+
+    return user;
+  } catch (error) {
+    return null;
+  }
+};
+
+/**
+ * Legacy sync function for backward compatibility
+ * New code should use syncUserToPrisma from /lib/auth/sync.ts
+ */
+export const syncUserProfile = async (
+  userId: string,
+  userData: {
+    email?: string;
+    full_name?: string;
+    avatar_url?: string;
+  },
 ) => {
-  return withSupabase(async (supabase) => {
-    try {
-      await supabase.auth.signUp({
-        email,
-        password,
-      });
+  try {
+    const existingProfile = await db.profile.findUnique({
+      where: { id: userId },
+    });
 
-      toast.success(`Success! Please check your inbox and confirm your email.`);
-      return true;
-    } catch (error) {
-      handleError('auth', {
-        defaultMessage: 'Signup Failed',
-        showToast: true,
-      });
-      return false;
-    }
-  });
-};
-
-/**
- * Resend verification email
- * This function is designed for client-side usage
- */
-export const resendVerificationEmail = async (email: string) => {
-  return withSupabase(async (supabase) => {
-    try {
-      await supabase.auth.resend({
-        type: 'signup',
-        email,
-      });
-
-      toast.success('Verification email resent!');
-      return true;
-    } catch (error) {
-      handleError('auth', {
-        defaultMessage: 'Failed to resend verification email',
-        showToast: true,
-      });
-      return false;
-    }
-  });
-};
-
-/**
- * Handles email/password login
- * This function is designed for client-side usage
- */
-export const loginWithEmailPassword = async (
-  email: string,
-  password: string,
-) => {
-  return withSupabase(async (supabase) => {
-    try {
-      const { data } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      window.location.href = '/organization';
-      toast.success(`Welcome back to Trellsy`);
-
-      return data;
-    } catch (error) {
-      handleError('auth', {
-        defaultMessage: 'Login Failed',
-        showToast: true,
-      });
-      return false;
-    }
-  });
-};
-
-/**
- * Handles Google OAuth login
- * This function is designed for client-side usage
- */
-export const loginWithGoogleOAuth = async () => {
-  return withSupabase(async (supabase) => {
-    try {
-      const state = Math.random().toString(36).substring(2, 15);
-
-      sessionStorage.setItem('supabase_oauth_state', state);
-
-      await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-
-          scopes: 'email profile',
+    if (existingProfile) {
+      return await db.profile.update({
+        where: { id: userId },
+        data: {
+          email: userData.email,
+          full_name: userData.full_name,
+          avatar_url: userData.avatar_url,
+          updated_at: new Date(),
         },
       });
-
-      // OAuth flow will handle redirect
-      return true;
-    } catch (error) {
-      handleError('auth', {
-        defaultMessage: 'Failed to login with Google',
-        showToast: true,
+    } else {
+      return await db.profile.create({
+        data: {
+          id: userId,
+          email: userData.email,
+          full_name: userData.full_name,
+          avatar_url: userData.avatar_url,
+        },
       });
-      return false;
     }
-  });
+  } catch (error) {
+    throw error;
+  }
 };
 
 /**
- * Handles user logout
- * This function is designed for client-side usage
+ * Check if user has organizations - used in callback route
  */
-export const logout = async () => {
-  return withSupabase(async (supabase) => {
-    try {
-      await supabase.auth.signOut();
+export const userHasOrganizations = async (userId: string) => {
+  try {
+    const membershipCount = await db.organizationMembers.count({
+      where: { profile_id: userId },
+    });
 
-      toast.success('Logged out successfully');
+    const createdOrgsCount = await db.organization.count({
+      where: { created_by: userId },
+    });
 
-      window.location.href = '/auth/login';
-
-      return true;
-    } catch (error) {
-      handleError('auth', {
-        defaultMessage: 'Failed to logout',
-        showToast: true,
-      });
-      return false;
-    }
-  });
-};
-
-/**
- * Gets the current authenticated user
- * This function is designed for client-side usage
- */
-export const getCurrentUser = async () => {
-  return withSupabase(async (supabase) => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      return user;
-    } catch (error) {
-      handleError('auth', {
-        showToast: true,
-      });
-      return false;
-    }
-  });
+    return membershipCount > 0 || createdOrgsCount > 0;
+  } catch (error) {
+    return false;
+  }
 };

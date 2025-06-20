@@ -17,7 +17,7 @@ import {
   resendVerificationEmail,
   signupWithEmailPassword,
 } from '@/lib/services/auth.service';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils/utils';
 import { GoogleButton } from './google-button';
 
 export function SignUpForm({

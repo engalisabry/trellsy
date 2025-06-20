@@ -133,6 +133,8 @@ export const Sidebar = ({ StorageKey = 't-sidebar-state' }: SidebarProps) => {
                 id,
                 name,
                 slug,
+                created_by: org.created_by,
+                created_at: org.created_at || new Date(),
                 logo_url,
               }}
               onExpand={onExpand}

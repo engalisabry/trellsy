@@ -1,90 +1,80 @@
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
-import { loginWithEmailPassword, loginWithGoogleOAuth, logout } from '../services/auth.service';
+import { signInWithEmail, signInWithGoogle, signOut } from '../auth/actions';
 
-// Simplified auth store for UI state only - no sensitive data
+// Simplified auth store for UI loading states only
 interface AuthUIState {
   isLoading: boolean;
-  isSuccess: boolean;
-  error: Error | null;
-  
-  // Actions
-  login: (email: string, password: string) => Promise<void>;
-  loginWithGoogle: () => Promise<void>;
+  error: string | null;
+
+  // Actions that delegate to new auth system
+  login: (email: string, password: string) => Promise<boolean>;
+  loginWithGoogle: () => Promise<boolean>;
   logout: () => Promise<void>;
   clearErrors: () => void;
   clearState: () => void;
 }
 
-export const useAuthStore = create<AuthUIState>()(
-  persist(
-    (set, get) => ({
-      isLoading: false,
-      isSuccess: false,
-      error: null,
-      
-      login: async (email: string, password: string) => {
-        set({ isLoading: true, error: null });
-        try {
-          await loginWithEmailPassword(email, password);
-          set({ isSuccess: true });
-        } catch (error) {
-          set({ error: error as Error, isSuccess: false });
-        } finally {
-          set({ isLoading: false });
-        }
-      },
-      
-      loginWithGoogle: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          await loginWithGoogleOAuth();
-          // OAuth flow will handle redirect and session establishment
-          set({ isSuccess: true });
-        } catch (error) {
-          set({ error: error as Error, isSuccess: false });
-        } finally {
-          set({ isLoading: false });
-        }
-      },
-      
-      logout: async () => {
-        set({ isLoading: true, error: null });
-        try {
-          await logout();
-          get().clearState();
-        } catch (error) {
-          set({ error: error as Error });
-        } finally {
-          set({ isLoading: false });
-        }
-      },
-      
-      clearErrors: () => set({ error: null }),
-      
-      clearState: () => set({
-        isSuccess: false,
-        error: null
-      }),
-    }),
-    {
-      name: 'auth-ui-store',
-      storage: createJSONStorage(() => sessionStorage),
-      // Only persist non-sensitive UI state
-      partialize: (state) => ({
-        isLoading: state.isLoading,
-        // Remove any sensitive authentication state from persistence
-      }),
-    }
-  )
-);
+export const useAuthStore = create<AuthUIState>()((set) => ({
+  isLoading: false,
+  error: null,
 
-// Legacy compatibility - will be deprecated
+  login: async (email: string, password: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await signInWithEmail(email, password);
+      if (result.success) {
+        return true;
+      } else {
+        set({ error: result.error || 'Login failed' });
+        return false;
+      }
+    } catch (error) {
+      set({ error: 'Login failed' });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  loginWithGoogle: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      const result = await signInWithGoogle();
+      if (result.success) {
+        return true;
+      } else {
+        set({ error: result.error || 'Google login failed' });
+        return false;
+      }
+    } catch (error) {
+      set({ error: 'Google login failed' });
+      return false;
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  logout: async () => {
+    set({ isLoading: true, error: null });
+    try {
+      await signOut();
+      set({ isLoading: false });
+    } catch (error) {
+      set({ error: 'Logout failed', isLoading: false });
+    }
+  },
+
+  clearErrors: () => set({ error: null }),
+
+  clearState: () => set({ error: null }),
+}));
+
+// Backward compatibility
 export const useAuthStoreCompat = () => {
   const store = useAuthStore();
   return {
     ...store,
-    // Map old property names for backward compatibility
-    isAuthenticated: false, // Always false - use useAuth hook instead
+    isSuccess: !store.error && !store.isLoading,
+    isAuthenticated: false, // This should come from useAuth() now
   };
 };

@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { updateSession } from '@/lib/supabase/middleware';
 
+// Define routes that don't require authentication
 const PUBLIC_ROUTES = [
   '/',
   '/login',
@@ -10,6 +11,7 @@ const PUBLIC_ROUTES = [
   '/auth/callback',
 ];
 
+// Check if a path is public (doesn't require auth)
 const isPublicRoute = (path: string) =>
   PUBLIC_ROUTES.some((route) => path === route) ||
   path.startsWith('/_next/') ||
@@ -42,8 +44,18 @@ export async function middleware(request: NextRequest) {
     if (isPublicRoute(request.nextUrl.pathname)) {
       response = NextResponse.next();
     } else {
-      // Process authentication for protected routes
-      response = await updateSession(request);
+      try {
+        // Process authentication for protected routes with timeout
+        const timeoutPromise = new Promise<NextResponse>((_, reject) => {
+          setTimeout(() => reject(new Error('Auth timeout')), 5000);
+        });
+
+        // Race between auth check and timeout
+        response = await Promise.race([updateSession(request), timeoutPromise]);
+      } catch (authError) {
+        // Fallback to next response on auth timeout
+        response = NextResponse.next();
+      }
     }
 
     // Apply security headers to all responses

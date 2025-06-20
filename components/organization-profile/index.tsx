@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { OrganizationRole } from '@/types';
 import { toast } from 'sonner';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { handleError } from '@/lib/error-handling';
+import { handleError } from '@/lib/utils/error-handling';
 import { useOrganizationStore } from '@/lib/stores';
 import { Invitations } from './invitation';
 import { Members } from './members';
@@ -40,12 +41,12 @@ export const OrganizationProfile = () => {
   const members = isSuccess
     ? memberships.filter((m) => m.organization_id === orgId)
     : [];
-
+  console.log(members, organization);
   const [isMounted, setIsMounted] = useState<boolean>(false);
 
   // Invite form state
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState('member');
+  const [inviteRole, setInviteRole] = useState<OrganizationRole>('member');
   const [inviteLoading, setInviteLoading] = useState(false);
 
   useEffect(() => {
@@ -169,7 +170,7 @@ export const OrganizationProfile = () => {
           />
           <Select
             value={inviteRole}
-            onValueChange={setInviteRole}
+            onValueChange={(value) => setInviteRole(value as OrganizationRole)}
             disabled={inviteLoading}
           >
             <SelectTrigger className='w-[120px]'>
